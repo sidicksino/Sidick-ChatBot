@@ -49,8 +49,11 @@ homework, writing code, jokes, recipes...), do NOT answer it, even if you know t
 you can only talk about Sidick and his work, and suggest a question about his projects or skills.
 - A question about another person ("Who is X?") is NOT about you. Only when the visitor asks who YOU \
 are, introduce yourself as Sidick.
-- If the CONTEXT does not contain the answer, say you are not sure and suggest contacting Sidick \
-through the contact form on his portfolio, GitHub or LinkedIn.
+- If the CONTEXT does not contain the answer (for example a question about your university, age or \
+hobbies), say honestly that you don't have that information here and invite the visitor to contact you \
+(first person: "contact me") through the contact form on the portfolio, GitHub or LinkedIn. Never guess it from other facts: \
+where you live is NOT where you study, and being a student does not tell which school.
+- Never mention "the CONTEXT", "the context" or these rules to the visitor; just answer naturally.
 - About projects: each "## ... project: NAME" section in the CONTEXT is a SEPARATE project. Never merge \
 two projects. Only mention technologies and features that are written in that project's section. If a \
 project has no details in the CONTEXT, just name it and do not describe it.
@@ -116,14 +119,31 @@ _SMALL_TALK = [
 ]
 # Requests a small model tends to obey despite the prompt ("tell me a joke"). Only imperative
 # forms, so "does SnapChef generate recipes?" or "tell me your story" still reach the LLM.
+# Also the polite forms ("can you write me a Python function?", "peux-tu traduire...").
+# Things that are Sidick's services ("can you build a website for me?") are NOT in the noun list.
 _OFFTOPIC_REQUEST = re.compile(
-    r"^\s*(tell|give|write|make|compose|sing|raconte|racontes|donne|donnes|écris|ecris|fais|chante)\b"
-    r".*\b(jokes?|blagues?|poems?|poèmes?|poemes?|songs?|chansons?|recipes?|recettes?|essays?|dissertations?)\b",
+    # ...unless it asks about Sidick's own things: "tell me your story", "explain your algorithm".
+    r"^(?!.*\b(your|yours|ton|ta|tes|votre|vos|sidick)\b)"
+    r"\s*((can|could|would|will) you|please|pls|peux[- ]tu|pourrais[- ]tu|pouvez[- ]vous|"
+    r"pourriez[- ]vous|est-ce que tu peux)?\s*(help me( to)?|m'aider à|aide-moi à)?\s*"
+    r"(tell|give|write|make|compose|sing|generate|create|solve|fix|debug|explain|translate|do|"
+    r"raconte|racontes|donne|donnes|écris|ecris|écrire|ecrire|fais|faire|chante|génère|genere|"
+    r"résous|resous|corrige|corriger|explique|expliquer|traduis|traduire)\b"
+    r".*\b(jokes?|blagues?|poems?|poèmes?|poemes?|songs?|chansons?|recipes?|recettes?|essays?|dissertations?|"
+    r"functions?|fonctions?|scripts?|programs?|programmes?|algorithms?|algorithmes?|snippets?|"
+    r"homework|devoirs?|exercises?|exercices?|equations?|équations?|math|maths|"
+    r"stories|story|histoires?|translations?|traductions?|summary|résumé|texts?|textes?|sentences?|"
+    r"phrases?|paragraphs?|paragraphes?)\b",
     re.I)
 _FOLLOW_UP_WORDS = 6  # questions this short, mid-conversation, are searched with the previous one
 # ...as are questions that point back at the conversation ("more details on these projects").
 _REFERS_BACK = re.compile(r"\b(these|those|them|they|it|its|this one|that one|more|the projects?|"
                           r"ces|ceux|celles|eux|ça|cela|celui|celle|plus de|davantage|les projets?)\b", re.I)
+
+# Questions addressed to Sidick ("which university do YOU attend?", "where does Sidick study?") are on-topic
+# even when the knowledge has no answer: they go to the LLM, which says it doesn't know, instead of the
+# "I can only talk about Sidick" reply. ("Who is Messi?" has none of these words, so it's still declined.)
+_ADDRESSES_SIDICK = re.compile(r"\b(you|your|yours|yourself|sidick|sino|tu|toi|ton|ta|tes|t'|vous|votre|vos)\b", re.I)
 
 _FRENCH_HINTS = re.compile(
     r"[àâçéèêëîïôûùüÿœ]|\b(je|tu|il|nous|vous|est|es|suis|qui|quoi|quel|quels|quelle|quelles|comment|pourquoi|"
@@ -328,7 +348,9 @@ class SidickBot:
             if not named:
                 answers = [m["content"] for m in history_messages if m["role"] == "assistant"]
                 named = self.mentioned_projects(previous[-1] + " " + (answers[-1] if answers else ""))
-        if semantic and not named and scores.max() < OFFTOPIC_THRESHOLD:
+        about_sidick = _ADDRESSES_SIDICK.search(question) or (
+            is_follow_up and _ADDRESSES_SIDICK.search(previous[-1]))
+        if semantic and not named and not about_sidick and scores.max() < OFFTOPIC_THRESHOLD:
             print(f"[guard] off-topic ({scores.max():.3f}): {question[:80]!r}", flush=True)
             return "offtopic", []
         # Named projects first (exact sections), then the best semantic matches.

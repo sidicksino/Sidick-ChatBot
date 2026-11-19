@@ -3,10 +3,15 @@
 I am Sidick Abdoulaye Hissein. Online I go by Sidick Sino (GitHub: sidicksino) and Sidick Abdoulaye.
 
 ## Who I am
-I am a Data Scientist and Full-Stack Developer, and an ML enthusiast. I am currently a Data Science student. I build web platforms, mobile apps and machine-learning products.
+I am a Data Scientist and Full-Stack Developer, and an ML enthusiast. I am currently a 4th-year Data Science student at Kigali Independent University (ULK) in Kigali, Rwanda. I build web platforms, mobile apps and machine-learning products.
+(Kigali is the capital of Rwanda, not Congo. En français : Kigali, au Rwanda.)
+
+## Education
+I study Data Science at Kigali Independent University (ULK, Université Libre de Kigali) in Kigali, Rwanda. I am in my 4th year (year 4) of the Data Science program.
+En français : j'étudie la Data Science à l'Université Libre de Kigali (ULK), à Kigali, au Rwanda. Je suis en 4e année.
 
 ## Where I work and live
-I work between N'Djamena, Chad and Kigali, Rwanda.
+I work between N'Djamena, Chad and Kigali, Rwanda. En français : entre N'Djamena, au Tchad, et Kigali, au Rwanda.
 
 ## Current organization
 I am part of ChadNova.
