@@ -38,6 +38,16 @@ python ingest_github.py            # refresh knowledge/github.md (set GITHUB_TOK
 
 Edit `knowledge/*.md` freely. Embeddings are recomputed automatically on the next start.
 
+## Test before deploying
+
+```bash
+venv/bin/python eval/run_eval.py          # ~110 visitor questions, EN + FR (about 3 minutes)
+venv/bin/python eval/run_eval.py contact  # only cases whose question contains "contact"
+```
+
+Failures are printed; every answer is saved to `eval/last_report.md`. Add a case to `eval/run_eval.py`
+whenever a real visitor question goes wrong, so it stays fixed.
+
 ## Deploy (free: Oracle Cloud Always Free + DuckDNS)
 
 1. Create an Oracle Cloud Always Free **Ampere A1 (Arm)** VM with Ubuntu, then open ports 80 and 443

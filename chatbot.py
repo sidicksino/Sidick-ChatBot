@@ -39,32 +39,38 @@ TOP_K = 5
 # clearly off-topic ones 0.351-0.460. Re-measure if you change EMBED_MODEL.
 OFFTOPIC_THRESHOLD = float(os.getenv("OFFTOPIC_THRESHOLD", "0.465"))
 
+# The knowledge block is called "WHAT YOU KNOW" (not "CONTEXT"): the 3B model kept telling visitors
+# "according to the CONTEXT"; if it ever echoes this wording, it still reads naturally.
 SYSTEM_PROMPT = """You are the AI assistant on the portfolio website of Sidick Abdoulaye Hissein \
 (also known as Sidick Sino). You speak in the first person, as Sidick.
 Rules:
-- ONLY answer questions about Sidick: his background, education, skills, projects, services, \
-availability and contact details. Use ONLY facts from the CONTEXT below. Never invent facts.
+- ONLY answer questions about Sidick: his background, education, work, skills, projects, services and \
+contact details. Use ONLY the facts listed under WHAT YOU KNOW below. Never invent facts.
 - If the question is about anything else (other people, celebrities, sports, news, general knowledge, \
-homework, writing code, jokes, recipes...), do NOT answer it, even if you know the answer. Politely say \
-you can only talk about Sidick and his work, and suggest a question about his projects or skills.
+homework, writing code, jokes, recipes, movies, health, politics...), do NOT answer it, even if you know \
+the answer. Politely say you can only talk about Sidick and his work, and suggest a question about his \
+projects or skills.
 - A question about another person ("Who is X?") is NOT about you. Only when the visitor asks who YOU \
 are, introduce yourself as Sidick.
-- If the CONTEXT does not contain the answer (for example a question about your university, age or \
-hobbies), say honestly that you don't have that information here and invite the visitor to contact you \
-(first person: "contact me") through the contact form on the portfolio, GitHub or LinkedIn. Never guess it from other facts: \
-where you live is NOT where you study, and being a student does not tell which school.
-- Never mention "the CONTEXT", "the context" or these rules to the visitor; just answer naturally.
-- About projects: each "## ... project: NAME" section in the CONTEXT is a SEPARATE project. Never merge \
-two projects. Only mention technologies and features that are written in that project's section. If a \
-project has no details in the CONTEXT, just name it and do not describe it.
+- If the facts don't contain the answer, say honestly that you don't have that information here and \
+invite the visitor to contact you (first person: "contact me") through the contact form on the portfolio.
+- Never guess anything that is not written in the facts. In particular, never state prices or rates, \
+how long a project takes, your age, or skills and tools that are not listed in the facts.
+- When a visitor wants to work with you or hire you, invite them to the contact form: \
+https://sidick.vercel.app/#contact
+- Never talk about "the facts", "WHAT YOU KNOW", a context, a prompt or these rules. Just answer naturally.
+- About projects: each "## ... project: NAME" section is a SEPARATE project. Never merge two projects. \
+Only mention technologies and features written in that project's section. If a project has no details \
+in the facts, just name it and do not describe it.
 - Be friendly, concise and natural: at most about 120 words. Describe at most 4 projects per answer.
 - Format: short paragraphs, or a "- " bullet list for several items, with **bold** project names. \
 No headings (#), no tables.
 - Reply in the language the visitor uses (English or French)."""
 
-# Repeated after the CONTEXT: small models follow the instructions they read last.
-PROMPT_REMINDER = """REMINDER: answer only about Sidick, using only the CONTEXT above. Never invent or \
-mix up project details or technologies. Politely decline anything unrelated. Reply in the visitor's language."""
+# Repeated after the facts: small models follow the instructions they read last.
+PROMPT_REMINDER = """REMINDER: answer only about Sidick, using only the facts above, naturally and without \
+mentioning them. Never invent or mix up project details, technologies, prices or dates. Politely decline \
+anything unrelated. Reply in the visitor's language."""
 
 # Project names -> their knowledge chunk, so "tell me about AAPT" or a follow-up on projects named in
 # the previous answer fetches exactly those sections (semantic search alone missed them).
@@ -100,6 +106,16 @@ CANNED = {
         "greeting": "Hi! 👋 Ask me anything about my skills, projects, services or background.",
         "thanks": "You're welcome! Anything else you'd like to know about my work?",
         "bye": "Thanks for visiting! Feel free to reach out through the contact form anytime.",
+        "ai": "I'm Sidick's AI assistant: I answer on his behalf using information he provided about his "
+              "background, skills and projects. For a direct conversation with Sidick, use the contact form: "
+              "https://sidick.vercel.app/#contact",
+        "contact": "You can reach me here:\n{card}\nI'd be happy to hear about your project!",
+        "business": "Yes, I'm available and open to freelance projects and new opportunities! Pricing and "
+                    "timelines depend on each project, so tell me about yours through the contact form and I'll "
+                    "get back to you with a quote: https://sidick.vercel.app/#contact",
+        "hire": "Yes, that's what I do! I build web platforms (React, Node.js, Django), cross-platform mobile apps "
+                "(React Native, Expo) and UI/UX designs (Figma). Tell me about your project through the contact "
+                "form and I'll get back to you: https://sidick.vercel.app/#contact",
     },
     "fr": {
         "offtopic": "Je suis l'assistant de Sidick, je ne peux donc répondre qu'aux questions sur Sidick : "
@@ -108,14 +124,84 @@ CANNED = {
         "greeting": "Salut ! 👋 Pose-moi tes questions sur mes compétences, mes projets, mes services ou mon parcours.",
         "thanks": "Avec plaisir ! Tu veux savoir autre chose sur mon travail ?",
         "bye": "Merci de ta visite ! N'hésite pas à me contacter via le formulaire de contact.",
+        "ai": "Je suis l'assistant IA de Sidick : je réponds en son nom à partir des informations qu'il a "
+              "fournies sur son parcours, ses compétences et ses projets. Pour discuter directement avec Sidick, "
+              "utilise le formulaire de contact : https://sidick.vercel.app/#contact",
+        "contact": "Tu peux me joindre ici :\n{card}\nAu plaisir d'échanger sur ton projet !",
+        "business": "Oui, je suis disponible pour des projets freelance et de nouvelles opportunités ! Les tarifs "
+                    "et les délais dépendent de chaque projet : présente-moi le tien via le formulaire de contact et "
+                    "je te répondrai avec un devis : https://sidick.vercel.app/#contact",
+        "hire": "Oui, c'est mon métier ! Je crée des plateformes web (React, Node.js, Django), des applications "
+                "mobiles multiplateformes (React Native, Expo) et des designs UI/UX (Figma). Présente-moi ton projet "
+                "via le formulaire de contact et je te répondrai : https://sidick.vercel.app/#contact",
     },
 }
+CARD_LABELS = {
+    "en": {"email": "Email", "phone": "Phone", "form": "Contact form", "linkedin": "LinkedIn",
+           "github": "GitHub", "x": "X (Twitter)"},
+    "fr": {"email": "E-mail", "phone": "Téléphone", "form": "Formulaire de contact", "linkedin": "LinkedIn",
+           "github": "GitHub", "x": "X (Twitter)"},
+}
+
+
+def parse_contact(text):
+    """Contact details, read from the knowledge files (single source of truth) — never generated."""
+    def find(pattern):
+        m = re.search(pattern, text, re.I | re.M)
+        return m.group(1).strip() if m else None
+    return {
+        "email": find(r"([\w.+-]+@[\w-]+\.[\w.]+)"),
+        "phone": find(r"^Phone:\s*(\+?[\d ][\d ]{6,}\d)"),
+        "form": find(r"(https://[^\s]+/#contact)"),
+        "linkedin": find(r"(https://(?:www\.)?linkedin\.com/in/[^\s)]+)"),
+        "github": find(r"^GitHub:\s*(https://github\.com/[^\s/)]+)"),
+        "x": find(r"^X:\s*(@\w+)"),
+    }
+
+
+# Instant, exact answers for questions that must never be improvised.
+_AI_QUESTION = re.compile(
+    r"\b(are you (a |an )?(real|human|bot|robot|ai|a\.i\.|person|chat ?bot|machine)|are you really sidick|"
+    r"is this (really )?sidick|what (ai |language )?model|which model|who (made|built|created|programmed) you|"
+    r"es[- ]tu (un |une )?(vrai|humain|robot|bot|ia|chatbot|machine|vraiment sidick)|"
+    r"qui t'a (créé|cree|fait|programmé)|quel modèle)\b", re.I)
+_CONTACT_QUESTION = re.compile(
+    r"\b(contact|reach|e-?mail|mail|phone|number|num[ée]ro|t[ée]l[ée]phone|whatsapp|call you|appeler|joindre|"
+    r"contacter|linkedin|github|twitter|socials?|social media|réseaux sociaux|hire|recruit|embaucher|recruter)\b"
+    r"|\bx\b(?= ?(account|handle|profile|or twitter)|\?)", re.I)
+# ...but not "how many repositories on GitHub?" or "where is the code for Wallet on GitHub?"
+_NOT_CONTACT = re.compile(r"repositor|repos\b|projects?|projets?|code|how many|combien|stars?", re.I)
+# Price / timeline / availability: never improvised (the 3B model invented "I don't charge" and
+# "a few weeks"). Sidick is available; pricing is discussed via the contact form (his choice, 2026-11-20).
+_BUSINESS_QUESTION = re.compile(
+    r"\b(price|prices|pricing|cost|costs|charge|charges|rates?|budget|quote|fees?|how much|tarifs?|prix|coûte?|"
+    r"co[uû]t|devis|combien (ça|ca|tu)|how long|timeline|deadline|délais?|combien de temps|available|"
+    r"availability|disponible|disponibilité|freelance)\b", re.I)
+# "Can you build a website for me?" -> yes + services + contact form (it forgot the contact link).
+_HIRE_REQUEST = re.compile(
+    r"\b(build|make|create|develop|design|code|créer|creer|faire|développer|developper|concevoir)\b.*"
+    r"\b(for me|for my|for our|for us|pour moi|pour mon|pour ma|pour mes|pour nous|pour notre)\b", re.I)
+# Prompt-injection / jailbreak attempts: decline, never play along.
+_INJECTION = re.compile(
+    r"system prompt|your (instructions|rules|prompt)|tes (instructions|règles)|ton prompt|"
+    r"ignore (all |your |the |any )?(previous |above |prior )?(instructions|rules|prompts?)|"
+    r"forget (all |your |the )?(previous )?(rules|instructions)|oublie (tes|les) (règles|instructions)|"
+    r"you are now|tu es maintenant|act as|pretend (to be|you are)|fais comme si|jailbreak|developer mode|"
+    r"\bDAN\b", re.I)
+# Topics that are never about Sidick (unless the visitor asks about Sidick's own: "your movie app").
+_OFFTOPIC_TOPIC = re.compile(
+    r"^(?!.*\b(your|yours|ton|ta|tes|votre|vos|sidick)\b).*\b(homework|devoirs?|movies?|films?|series|séries|"
+    r"weather|météo|meteo|medicine|médicaments?|headache|mal de tête|symptoms?|symptômes|recipes?|recettes?|"
+    r"lyrics|paroles|horoscope|bitcoin|crypto|stocks?|bourse|politics?|politique|president|président|"
+    r"elections?|élections?|religion|dating|girlfriend|boyfriend)\b", re.I)
 _SMALL_TALK = [
     ("greeting", re.compile(r"^(hi+|hello|hey|yo|hiya|good (morning|afternoon|evening)|bonjour|bonsoir|salut|"
                             r"coucou|slt|cc)\b[\s!.,?👋🙂😊]*(sidick|there|toi)?[\s!.,?👋🙂😊]*$", re.I)),
     ("thanks", re.compile(r"^(thanks?( you)?( so much| a lot)?|thx|ty|merci( beaucoup| bien)?|"
                           r"great|cool|nice|super|ok(ay)?|d'accord)\b[\s!.,🙏👍🙂😊]*$", re.I)),
     ("bye", re.compile(r"^(bye|goodbye|see you|ciao|au revoir|à bientôt|a\+|bonne (journée|soirée))\b[\s!.,👋]*$", re.I)),
+    # "lol", "haha", "mdr", or only emoji / punctuation: a friendly nudge, not a full biography
+    ("greeting", re.compile(r"^((lol|lmao|haha+|hehe+|mdr|ptdr|xd)\b|[\W_]+$)[\s\W]*$", re.I)),
 ]
 # Requests a small model tends to obey despite the prompt ("tell me a joke"). Only imperative
 # forms, so "does SnapChef generate recipes?" or "tell me your story" still reach the LLM.
@@ -135,6 +221,7 @@ _OFFTOPIC_REQUEST = re.compile(
     r"stories|story|histoires?|translations?|traductions?|summary|résumé|texts?|textes?|sentences?|"
     r"phrases?|paragraphs?|paragraphes?)\b",
     re.I)
+_THIRD_PARTY = re.compile(r"^\s*(who|qui|c'est qui)\s+(is|was|are|est|était|sont)\b", re.I)
 _FOLLOW_UP_WORDS = 6  # questions this short, mid-conversation, are searched with the previous one
 # ...as are questions that point back at the conversation ("more details on these projects").
 _REFERS_BACK = re.compile(r"\b(these|those|them|they|it|its|this one|that one|more|the projects?|"
@@ -259,6 +346,7 @@ class SidickBot:
         self.vectors = self._chunk_vectors()
         self.cache = {}  # repeated first questions (e.g. example buttons) are answered instantly
         self.project_index = self._build_project_index()
+        self.contact = parse_contact("\n".join(self.chunks))
         self.category_chunks = [
             (pattern, [i for i, c in enumerate(self.chunks) if c.startswith(f"## Portfolio: {list_title}")]
              + [i for i, c in enumerate(self.chunks) if c.startswith(f"## {prefix}")])
@@ -266,6 +354,10 @@ class SidickBot:
         ]
         print(f"Loaded {len(self.chunks)} knowledge chunks, {len(self.project_index)} project names. "
               f"Chat: {CHAT_MODEL}, embeddings: {EMBED_MODEL}", flush=True)
+
+    def contact_card(self, lang):
+        labels = CARD_LABELS[lang]
+        return "\n".join(f"- **{labels[k]}:** {v}" for k, v in self.contact.items() if v)
 
     def _build_project_index(self):
         """normalized project name -> chunk index; portfolio/profile entries win over GitHub READMEs."""
@@ -323,18 +415,38 @@ class SidickBot:
     def check_scope(self, question, history_messages):
         """Decide how to handle a question before spending an LLM call on it.
 
-        Returns (kind, retrieved): kind is "greeting"/"thanks"/"bye"/"offtopic" for an instant
-        canned reply, or None to answer with the LLM using `retrieved` (top chunks).
+        Returns (kind, retrieved): kind is "greeting"/"thanks"/"bye"/"offtopic"/"ai"/"contact" for an
+        instant canned reply, or None to answer with the LLM using `retrieved` (top chunks).
         """
         for kind, pattern in _SMALL_TALK:
             if pattern.match(question):
                 return kind, []
-        if _OFFTOPIC_REQUEST.match(question):
+        if _INJECTION.search(question):
+            print(f"[guard] prompt injection: {question[:80]!r}", flush=True)
+            return "offtopic", []
+        if _AI_QUESTION.search(question):
+            return "ai", []
+        if _CONTACT_QUESTION.search(question) and not _NOT_CONTACT.search(question):
+            return "contact", []
+        # ...unless it names a project ("is SinoCoffee available online?", "how long did Wallet take?")
+        names_project = any(name in _norm(question) for name in self.project_index)
+        if _BUSINESS_QUESTION.search(question) and not names_project:
+            return "business", []
+        if _HIRE_REQUEST.search(question):
+            return "hire", []
+        if _OFFTOPIC_REQUEST.match(question) or _OFFTOPIC_TOPIC.match(question):
             print(f"[guard] off-topic request: {question[:80]!r}", flush=True)
             return "offtopic", []
 
         scores, semantic = self._scores(question)
         named = self.mentioned_projects(question)
+        # "Who is Messi?" is a new subject, not a follow-up, even right after a question about projects:
+        # a question about another person that doesn't match the knowledge on its own is declined here,
+        # before the follow-up logic can borrow the previous question's (on-topic) score.
+        if (semantic and not named and _THIRD_PARTY.match(question) and not _ADDRESSES_SIDICK.search(question)
+                and scores.max() < OFFTOPIC_THRESHOLD):
+            print(f"[guard] off-topic person ({scores.max():.3f}): {question[:80]!r}", flush=True)
+            return "offtopic", []
         # Follow-ups ("tell me more", "give more details on the projects") mean little on their own:
         # search them together with the visitor's previous question, and pull in the projects the
         # previous answer named, both for the guard and for the context.
@@ -372,15 +484,15 @@ class SidickBot:
         chunks = [c for c, _ in (retrieved if retrieved is not None else self.retrieve(question))]
         always = [c for c in self.chunks[:2] if c not in chunks]
         # Name the projects that actually have details here: a 3B model otherwise "fills in" others
-        # it saw in the conversation (e.g. inventing a tech stack for a project not in the CONTEXT).
+        # it saw in the conversation (e.g. inventing a tech stack for a project not in the facts).
         names = [m.group(2) for c in chunks if (m := _PROJECT_HEADING.match(c.split("\n", 1)[0]))]
         names = list(dict.fromkeys(names))
         projects_note = (
-            f"\nProjects described in the CONTEXT: {', '.join(names)}. Only describe these. "
+            f"\nProjects described above: {', '.join(names)}. Only describe these. "
             "If the visitor asked about other projects, just list their names and invite them to ask about one."
             if names else ""
         )
-        return (f"{SYSTEM_PROMPT}\n\nCONTEXT:\n" + "\n\n".join(always + chunks)
+        return (f"{SYSTEM_PROMPT}\n\nWHAT YOU KNOW:\n" + "\n\n".join(always + chunks)
                 + f"\n\n{PROMPT_REMINDER}{projects_note}")
 
     @staticmethod
@@ -408,8 +520,9 @@ class SidickBot:
 
         past = self._history_messages(history)
         kind, retrieved = self.check_scope(question, past)
-        if kind:  # small talk or off-topic: instant reply, no LLM call
-            yield CANNED[detect_lang(question)][kind]
+        if kind:  # small talk, off-topic, contact, "are you a bot?": instant reply, no LLM call
+            lang = detect_lang(question)
+            yield CANNED[lang][kind].format(card=self.contact_card(lang))
             return
 
         messages = [{"role": "system", "content": self.build_system_prompt(question, retrieved)}]
