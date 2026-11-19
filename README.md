@@ -11,6 +11,8 @@ widget/sidick-widget.js         (auto-HTTPS)   RAG over knowledge/      qwen2.5:
 - `knowledge/`: what the bot knows (`profile.md`, `portfolio.md`, `github.md`, plus any `.txt`/`.pdf`).
 - `chatbot.py`: chunking, Ollama embeddings (`bge-m3`, multilingual), retrieval, and the streamed answer from `qwen2.5:3b`.
   If Ollama is down, it answers straight from the best-matching knowledge.
+  Off-topic questions ("Who is Messi?", "write me code", jokes) and small talk get an instant
+  canned reply without calling the model; tune `OFFTOPIC_THRESHOLD` in `.env` if needed.
 - `server.py`: public API (`POST /chat`, `GET /health`) with CORS limited to the portfolio, rate limits and a message length cap.
 - `widget/sidick-widget.js`: the chat bubble for the portfolio (plain JS, works in React/Vite/HTML).
 - `app.py`: Gradio UI for local testing.

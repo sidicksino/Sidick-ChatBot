@@ -33,16 +33,76 @@ MAX_CHUNK_CHARS = 1200
 HISTORY_TURNS = 6  # only the last N messages are sent, to keep prompts short (= faster on CPU)
 TOP_K = 5
 
-SYSTEM_PROMPT = """You are Sidick Abdoulaye Hissein (also known as Sidick Sino). You are his personal AI \
-assistant on his portfolio website, and you speak in the first person as Sidick.
+# Off-topic guard. A question whose best knowledge match scores below this is not about Sidick
+# (celebrities, weather, homework, "write me code"...) and is declined without calling the LLM.
+# Measured with bge-m3 on this knowledge: questions about Sidick scored 0.476-0.665,
+# clearly off-topic ones 0.351-0.460. Re-measure if you change EMBED_MODEL.
+OFFTOPIC_THRESHOLD = float(os.getenv("OFFTOPIC_THRESHOLD", "0.465"))
+
+SYSTEM_PROMPT = """You are the AI assistant on the portfolio website of Sidick Abdoulaye Hissein \
+(also known as Sidick Sino). You speak in the first person, as Sidick.
 Rules:
-- Answer ONLY from the CONTEXT below. If the answer is not there, say you are not sure and suggest \
-contacting Sidick through the contact form on his portfolio, GitHub or LinkedIn. Never invent facts.
+- ONLY answer questions about Sidick: his background, education, skills, projects, services, \
+availability and contact details. Use ONLY facts from the CONTEXT below. Never invent facts.
+- If the question is about anything else (other people, celebrities, sports, news, general knowledge, \
+homework, writing code, jokes, recipes...), do NOT answer it, even if you know the answer. Politely say \
+you can only talk about Sidick and his work, and suggest a question about his projects or skills.
+- A question about another person ("Who is X?") is NOT about you. Only when the visitor asks who YOU \
+are, introduce yourself as Sidick.
+- If the CONTEXT does not contain the answer, say you are not sure and suggest contacting Sidick \
+through the contact form on his portfolio, GitHub or LinkedIn.
 - Be friendly, concise and natural: at most about 100 words.
-- Reply in the language the visitor uses (English or French).
-- If asked "Who are you?", introduce yourself as Sidick."""
+- Reply in the language the visitor uses (English or French)."""
+
+# Repeated after the CONTEXT: small models follow the instructions they read last.
+PROMPT_REMINDER = """REMINDER: answer only about Sidick, using only the CONTEXT above. \
+Politely decline anything unrelated. Reply in the visitor's language."""
 
 OFFLINE_PREFIX = "My AI brain is resting right now, but here is what I know about that:\n\n"
+
+# Instant replies that never reach the LLM (cheap on a CPU server, and always on-topic).
+CANNED = {
+    "en": {
+        "offtopic": "I'm Sidick's assistant, so I can only answer questions about Sidick: his skills, "
+                    "projects, services and background. Try asking me what I've built, or how to contact me!",
+        "greeting": "Hi! 👋 Ask me anything about my skills, projects, services or background.",
+        "thanks": "You're welcome! Anything else you'd like to know about my work?",
+        "bye": "Thanks for visiting! Feel free to reach out through the contact form anytime.",
+    },
+    "fr": {
+        "offtopic": "Je suis l'assistant de Sidick, je ne peux donc répondre qu'aux questions sur Sidick : "
+                    "ses compétences, ses projets, ses services et son parcours. Demande-moi par exemple "
+                    "ce que j'ai réalisé, ou comment me contacter !",
+        "greeting": "Salut ! 👋 Pose-moi tes questions sur mes compétences, mes projets, mes services ou mon parcours.",
+        "thanks": "Avec plaisir ! Tu veux savoir autre chose sur mon travail ?",
+        "bye": "Merci de ta visite ! N'hésite pas à me contacter via le formulaire de contact.",
+    },
+}
+_SMALL_TALK = [
+    ("greeting", re.compile(r"^(hi+|hello|hey|yo|hiya|good (morning|afternoon|evening)|bonjour|bonsoir|salut|"
+                            r"coucou|slt|cc)\b[\s!.,?👋🙂😊]*(sidick|there|toi)?[\s!.,?👋🙂😊]*$", re.I)),
+    ("thanks", re.compile(r"^(thanks?( you)?( so much| a lot)?|thx|ty|merci( beaucoup| bien)?|"
+                          r"great|cool|nice|super|ok(ay)?|d'accord)\b[\s!.,🙏👍🙂😊]*$", re.I)),
+    ("bye", re.compile(r"^(bye|goodbye|see you|ciao|au revoir|à bientôt|a\+|bonne (journée|soirée))\b[\s!.,👋]*$", re.I)),
+]
+# Requests a small model tends to obey despite the prompt ("tell me a joke"). Only imperative
+# forms, so "does SnapChef generate recipes?" or "tell me your story" still reach the LLM.
+_OFFTOPIC_REQUEST = re.compile(
+    r"^\s*(tell|give|write|make|compose|sing|raconte|racontes|donne|donnes|écris|ecris|fais|chante)\b"
+    r".*\b(jokes?|blagues?|poems?|poèmes?|poemes?|songs?|chansons?|recipes?|recettes?|essays?|dissertations?)\b",
+    re.I)
+_FOLLOW_UP_WORDS = 6  # questions this short, mid-conversation, are searched with the previous one
+
+_FRENCH_HINTS = re.compile(
+    r"[àâçéèêëîïôûùüÿœ]|\b(je|tu|il|nous|vous|est|es|suis|qui|quoi|quel|quels|quelle|quelles|comment|pourquoi|"
+    r"où|combien|le|la|les|des|du|une|un|et|ton|ta|tes|mon|ma|mes|avec|pour|dans|sur|peux|bonjour|salut|"
+    r"merci|parle|moi|toi)\b", re.I)
+
+
+def detect_lang(text):
+    """Very small English/French guess, only used for the canned replies above."""
+    return "fr" if len(_FRENCH_HINTS.findall(text)) >= 1 and not re.search(r"\b(the|what|who|you|is|are)\b", text, re.I) \
+        else "en"
 
 
 # ---------------------------------------------------------------- knowledge loading
@@ -163,23 +223,54 @@ class SidickBot:
         np.save(path, vectors)
         return vectors
 
-    def retrieve(self, question, k=TOP_K):
+    def _scores(self, question):
+        """Similarity of the question to every chunk. Second value: True if semantic (Ollama up)."""
         try:
-            scores = self.vectors @ embed([question])[0]
+            return self.vectors @ embed([question])[0], True
         except requests.RequestException:
-            scores = self._keyword_scores(question)  # Ollama down: crude word-overlap retrieval
+            return self._keyword_scores(question), False  # Ollama down: crude word-overlap retrieval
+
+    def retrieve(self, question, k=TOP_K):
+        scores, _ = self._scores(question)
         top = np.argsort(scores)[::-1][:k]
         return [(self.chunks[i], float(scores[i])) for i in top]
+
+    def check_scope(self, question, history_messages):
+        """Decide how to handle a question before spending an LLM call on it.
+
+        Returns (kind, retrieved): kind is "greeting"/"thanks"/"bye"/"offtopic" for an instant
+        canned reply, or None to answer with the LLM using `retrieved` (top chunks).
+        """
+        for kind, pattern in _SMALL_TALK:
+            if pattern.match(question):
+                return kind, []
+        if _OFFTOPIC_REQUEST.match(question):
+            print(f"[guard] off-topic request: {question[:80]!r}", flush=True)
+            return "offtopic", []
+
+        scores, semantic = self._scores(question)
+        # Follow-ups ("tell me more", "and the second one?") mean little on their own: search them
+        # together with the visitor's previous question, both for the guard and for the context.
+        previous = [m["content"] for m in history_messages if m["role"] == "user"]
+        if previous and (len(question.split()) <= _FOLLOW_UP_WORDS or scores.max() < OFFTOPIC_THRESHOLD):
+            combined, _ = self._scores(previous[-1] + " " + question)
+            if combined.max() >= scores.max() or scores.max() < OFFTOPIC_THRESHOLD:
+                scores = combined
+        if semantic and scores.max() < OFFTOPIC_THRESHOLD:
+            print(f"[guard] off-topic ({scores.max():.3f}): {question[:80]!r}", flush=True)
+            return "offtopic", []
+        top = np.argsort(scores)[::-1][:TOP_K]
+        return None, [(self.chunks[i], float(scores[i])) for i in top]
 
     def _keyword_scores(self, question):
         words = {w for w in re.findall(r"\w{3,}", question.lower())}
         return np.array([sum(w in c.lower() for w in words) for c in self.chunks], dtype=np.float32)
 
-    def build_system_prompt(self, question):
+    def build_system_prompt(self, question, retrieved=None):
         # Always include the identity chunks so "Who are you?" works even when similarity is weak.
-        retrieved = [c for c, _ in self.retrieve(question)]
-        always = [c for c in self.chunks[:2] if c not in retrieved]
-        return f"{SYSTEM_PROMPT}\n\nCONTEXT:\n" + "\n\n".join(always + retrieved)
+        chunks = [c for c, _ in (retrieved if retrieved is not None else self.retrieve(question))]
+        always = [c for c in self.chunks[:2] if c not in chunks]
+        return f"{SYSTEM_PROMPT}\n\nCONTEXT:\n" + "\n\n".join(always + chunks) + f"\n\n{PROMPT_REMINDER}"
 
     @staticmethod
     def _history_messages(history):
@@ -204,8 +295,14 @@ class SidickBot:
             yield self.cache[key]
             return
 
-        messages = [{"role": "system", "content": self.build_system_prompt(question)}]
-        messages += self._history_messages(history)
+        past = self._history_messages(history)
+        kind, retrieved = self.check_scope(question, past)
+        if kind:  # small talk or off-topic: instant reply, no LLM call
+            yield CANNED[detect_lang(question)][kind]
+            return
+
+        messages = [{"role": "system", "content": self.build_system_prompt(question, retrieved)}]
+        messages += past
         messages.append({"role": "user", "content": question})
 
         parts = []
