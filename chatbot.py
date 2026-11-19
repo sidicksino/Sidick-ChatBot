@@ -25,6 +25,28 @@ contacting Sidick through his portfolio, GitHub or LinkedIn. Never invent facts.
 - If asked "Who are you?", introduce yourself as Sidick."""
 
 
+def _extract_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            elif hasattr(item, "text"):
+                parts.append(str(item.text))
+            elif item is not None:
+                parts.append(str(item))
+        return " ".join(parts).strip()
+    if isinstance(content, dict) and "text" in content:
+        return str(content["text"])
+    if hasattr(content, "text"):
+        return str(content.text)
+    return str(content) if content is not None else ""
+
+
 def load_chunks():
     """Split every markdown file in knowledge/ into one chunk per '## ' section."""
     chunks = []
@@ -61,21 +83,32 @@ class SidickBot:
         from google import genai  # pip install google-genai
         from google.genai import types
 
-        client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        question_text = _extract_text(question)
+
+        client = genai.Client(
+            api_key=os.environ["GEMINI_API_KEY"],
+            http_options={"api_version": "v1beta"},
+        )
         # Gradio history uses roles "user"/"assistant"; Gemini expects "user"/"model".
-        contents = [
-            types.Content(
-                role="model" if m["role"] == "assistant" else "user",
-                parts=[types.Part(text=m["content"])],
-            )
-            for m in (history or [])
-        ]
-        contents.append(types.Content(role="user", parts=[types.Part(text=question)]))
+        contents = []
+        for m in (history or []):
+            role = m["role"] if isinstance(m, dict) else getattr(m, "role", "user")
+            raw_content = m["content"] if isinstance(m, dict) else getattr(m, "content", "")
+            text = _extract_text(raw_content)
+            if text:
+                contents.append(
+                    types.Content(
+                        role="model" if role == "assistant" else "user",
+                        parts=[types.Part(text=text)],
+                    )
+                )
+
+        contents.append(types.Content(role="user", parts=[types.Part(text=question_text)]))
         reply = client.models.generate_content(
             model=os.getenv("CHAT_MODEL", "gemini-2.5-flash"),
             contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=self.build_prompt(question),
+                system_instruction=self.build_prompt(question_text),
                 max_output_tokens=500,
             ),
         )
