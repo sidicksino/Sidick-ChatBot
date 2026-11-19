@@ -24,6 +24,18 @@ To work with me, use the contact form at https://sidick.vercel.app/#contact.
 My portfolio lists 18 projects: 7 web projects, 4 mobile apps, 4 design projects and 3 ML & AI projects.
 Featured work: AAPT, Académie Royale, SINOINFOS, TchadInfos, Pima Diabetes Prediction App and Disease Prediction System.
 
+## Portfolio: list of my 7 web projects
+My web projects (websites and web apps): AAPT, Académie Royale, SinoCoffee, SinoAgency, Insta Abeche Website, Sino Ecommerce Website and SINOINFOS.
+
+## Portfolio: list of my 4 mobile apps
+My mobile apps (iOS and Android, built with React Native and Expo): SinoBoutique, TchadInfos, Wallet and To-Do.
+
+## Portfolio: list of my 3 ML & AI projects
+My machine learning and AI projects: Pima Diabetes Prediction App, Disease Prediction System and Sino Ai.
+
+## Portfolio: list of my 4 design projects
+My UI/UX design projects in Figma: TchadInfos Design, Ecommerce Mobile Design, Sidick Portfolio Design and Sino Ecommerce Design.
+
 ## Web project: AAPT
 A web platform for the Association Actions Pour Tous Tchad, promoting social cohesion and community support. A client project.
 Tech: React, Tailwind CSS, Supabase, i18next, Vercel.

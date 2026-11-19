@@ -21,7 +21,22 @@ if os.getenv("GITHUB_TOKEN"):
     HEADERS["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
 
 
+# Unedited starter READMEs describe the framework, not the project. Keeping them made the bot
+# describe e.g. TchadInfos as "a Learn Expo tutorial".
+TEMPLATE_README_MARKERS = re.compile(
+    r"This is an Expo project created with|create-expo-app|Getting Started with Create React App|"
+    r"This project was bootstrapped with|This template provides a minimal setup to get React working in Vite|"
+    r"This is a \[?Next\.js\]? project bootstrapped|create-next-app",
+    re.I)
+
+
+def is_template_readme(text):
+    return bool(TEMPLATE_README_MARKERS.search(text))
+
+
 def clean_readme(text):
+    if is_template_readme(text):
+        return ""
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)        # images / badges
     text = re.sub(r"<[^>]+>", "", text)                      # html tags
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)     # links -> their text

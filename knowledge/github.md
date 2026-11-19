@@ -354,7 +354,7 @@ Key Classes for Restaurant Analytics
 | `40` | **wine glass** | Dining tracking |
 | `41` | **cup** | Beverage service tracking |
 | `42 – 45` | **fork, knife, spoon, bowl** | Cutlery & dish tracking |
-| `52 – 55` | **hot dog, pizza, donut, cake** | Food delivery / dining 
+| `52 – 55` | **hot dog, pizza, donut, cake** | Food delivery / dining
 
 ## GitHub project: Smart-Parking-Management-System
 This is one of my GitHub repositories: Smart-Parking-Management-System.
@@ -825,115 +825,11 @@ A virtual environment keeps your project's packages separate from the rest of yo
 This is one of my GitHub repositories: SmartGuard.
 Main language: JavaScript.
 Code: https://github.com/sidicksino/SmartGuard (updated 2026-06-04, 0 stars).
-README:
-Welcome to your Expo app 👋
-
-This is an Expo project created with `create-expo-app`.
-
-Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- development build
-- Android emulator
-- iOS simulator
-- Expo Go, a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses file-based routing.
-
-Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- Expo documentation: Learn fundamentals, or go into advanced topics with our guides.
-- Learn Expo tutorial: Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-Join the community
-
-Join our community of developers creating universal apps.
-
-- Expo on GitHub: View our open source platform and contribute.
-- Discord community: Chat with Expo users and ask questions.
-SmartGuard
 
 ## GitHub project: duolingo-clone
 This is one of my GitHub repositories: duolingo-clone.
 Main language: TypeScript.
 Code: https://github.com/sidicksino/duolingo-clone (updated 2026-05-18, 0 stars).
-README:
-Welcome to your Expo app 👋
-
-This is an Expo project created with `create-expo-app`.
-
-Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- development build
-- Android emulator
-- iOS simulator
-- Expo Go, a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses file-based routing.
-
-Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- Expo documentation: Learn fundamentals, or go into advanced topics with our guides.
-- Learn Expo tutorial: Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-Join the community
-
-Join our community of developers creating universal apps.
-
-- Expo on GitHub: View our open source platform and contribute.
-- Discord community: Chat with Expo users and ask questions.
-duolingo-clone
 
 ## GitHub project: Snapchat_bot
 This is one of my GitHub repositories: Snapchat_bot.
@@ -1024,57 +920,6 @@ SinoAgency
 This is one of my GitHub repositories: Boutique_Frontend.
 Main language: JavaScript.
 Code: https://github.com/sidicksino/Boutique_Frontend (updated 2026-02-26, 0 stars).
-README:
-Welcome to your Expo app 👋
-
-This is an Expo project created with `create-expo-app`.
-
-Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- development build
-- Android emulator
-- iOS simulator
-- Expo Go, a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses file-based routing.
-
-Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- Expo documentation: Learn fundamentals, or go into advanced topics with our guides.
-- Learn Expo tutorial: Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-Join the community
-
-Join our community of developers creating universal apps.
-
-- Expo on GitHub: View our open source platform and contribute.
-- Discord community: Chat with Expo users and ask questions.
 
 ## GitHub project: wallet
 This is one of my GitHub repositories: wallet.
@@ -1196,104 +1041,6 @@ Code: https://github.com/sidicksino/Data-Visualization-Fat (updated 2026-02-11, 
 This is one of my GitHub repositories: tchadinfos_V2.
 Main language: TypeScript.
 Code: https://github.com/sidicksino/tchadinfos_V2 (updated 2026-02-08, 0 stars).
-README:
-Welcome to your Expo app
-
-This is an Expo project created with `create-expo-app`.
-
-Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- development build
-- Android emulator
-- iOS simulator
-- Expo Go, a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses file-based routing.
-
-Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- Expo documentation: Learn fundamentals, or go into advanced topics with our guides.
-- Learn Expo tutorial: Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-Join the community
-
-Join our community of developers creating universal apps.
-
-- Expo on GitHub: View our open source platform and contribute.
-- Discord community: Chat with Expo users and ask questions.
-
-Live Streaming Configuration
-
-To update the **Live TV** and **Radio** streams, you do NOT need to edit the code. Simply open the `.env` file in the root directory and update the following variables:
-
-```bash
-TV Direct -> Must be an HLS stream (.m3u8)
-EXPO_PUBLIC_TV_STREAM_URL=https://your-hls-stream-url.m3u8
-
-Radio Direct -> Can be MP3, AAC, or standard audio stream
-EXPO_PUBLIC_RADIO_STREAM_URL=https://your-radio-stream.mp3
-```
-
-> **Note:** After changing the `.env` file, you may need to restart the development server (`npx expo start -c`) for changes to take effect.
-
-Development & Build Guide
-
-1. Initialize EAS (Expo Application Services)
-To link your project to EAS, run:
-
-```bash
-eas init
-```
-**Output:**
-- Project created for `@sidick102/TchadInfos`
-- Project ID: `213ead18-5838-482e-940c-8045a9fe50c2`
-
-2. Install Development Client
-For native modules support (e.g., `expo-video`, `expo-av`), install the dev client:
-
-```bash
-npx expo install expo-dev-client
-```
-
-3. Configure Build
-Generate the `eas.json` configuration file:
-
-```bash
-eas build:configure
-```
-Select **All** platforms when prompted.
-
-4. Create Development Build (Android)
-To compile a standalone Android build that includes all native libraries:
-
-```bash
-eas build --prof
 
 ## GitHub project: CinematicConstructionBot
 This is one of my GitHub repositories: CinematicConstructionBot.
@@ -1347,57 +1094,6 @@ CinematicConstructionBot
 This is one of my GitHub repositories: tchadInfos_version1.
 Main language: TypeScript.
 Code: https://github.com/sidicksino/tchadInfos_version1 (updated 2026-01-30, 0 stars).
-README:
-Welcome to your Expo app 👋
-
-This is an Expo project created with `create-expo-app`.
-
-Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- development build
-- Android emulator
-- iOS simulator
-- Expo Go, a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses file-based routing.
-
-Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- Expo documentation: Learn fundamentals, or go into advanced topics with our guides.
-- Learn Expo tutorial: Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-Join the community
-
-Join our community of developers creating universal apps.
-
-- Expo on GitHub: View our open source platform and contribute.
-- Discord community: Chat with Expo users and ask questions.
 
 ## GitHub project: School
 This is one of my GitHub repositories: School.
@@ -1501,81 +1197,6 @@ Code: https://github.com/sidicksino/First-Django (updated 2026-01-27, 0 stars).
 This is one of my GitHub repositories: animation.
 Main language: TypeScript.
 Code: https://github.com/sidicksino/animation (updated 2026-01-26, 0 stars).
-README:
-React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- @vitejs/plugin-react uses Babel (or oxc when used in rolldown-vite) for Fast Refresh
-- @vitejs/plugin-react-swc uses SWC for Fast Refresh
-
-React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see this documentation.
-
-Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install eslint-plugin-react-x and eslint-plugin-react-dom for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-animation
 
 ## GitHub project: SinoPharmacie
 This is one of my GitHub repositories: SinoPharmacie.
@@ -1596,80 +1217,6 @@ This is one of my GitHub repositories: test.
 Main language: TypeScript.
 Live demo: https://test-azure-three-52.vercel.app
 Code: https://github.com/sidicksino/test (updated 2025-12-28, 0 stars).
-README:
-React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- @vitejs/plugin-react uses Babel (or oxc when used in rolldown-vite) for Fast Refresh
-- @vitejs/plugin-react-swc uses SWC for Fast Refresh
-
-React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see this documentation.
-
-Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install eslint-plugin-react-x and eslint-plugin-react-dom for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
 
 ## GitHub project: ML-project
 This is one of my GitHub repositories: ML-project.

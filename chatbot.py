@@ -51,12 +51,41 @@ you can only talk about Sidick and his work, and suggest a question about his pr
 are, introduce yourself as Sidick.
 - If the CONTEXT does not contain the answer, say you are not sure and suggest contacting Sidick \
 through the contact form on his portfolio, GitHub or LinkedIn.
-- Be friendly, concise and natural: at most about 100 words.
+- About projects: each "## ... project: NAME" section in the CONTEXT is a SEPARATE project. Never merge \
+two projects. Only mention technologies and features that are written in that project's section. If a \
+project has no details in the CONTEXT, just name it and do not describe it.
+- Be friendly, concise and natural: at most about 120 words. Describe at most 4 projects per answer.
+- Format: short paragraphs, or a "- " bullet list for several items, with **bold** project names. \
+No headings (#), no tables.
 - Reply in the language the visitor uses (English or French)."""
 
 # Repeated after the CONTEXT: small models follow the instructions they read last.
-PROMPT_REMINDER = """REMINDER: answer only about Sidick, using only the CONTEXT above. \
-Politely decline anything unrelated. Reply in the visitor's language."""
+PROMPT_REMINDER = """REMINDER: answer only about Sidick, using only the CONTEXT above. Never invent or \
+mix up project details or technologies. Politely decline anything unrelated. Reply in the visitor's language."""
+
+# Project names -> their knowledge chunk, so "tell me about AAPT" or a follow-up on projects named in
+# the previous answer fetches exactly those sections (semantic search alone missed them).
+_PROJECT_HEADING = re.compile(r"^##\s+(Web project|Mobile app|ML & AI project|Project|GitHub project):\s*(.+?)\s*$")
+_GENERIC_NAMES = {"test", "animation", "portfolio", "website", "app", "project", "demo", "chatbot", "quiz",
+                  "to do", "todo", "news", "blog", "api", "backend", "frontend"}
+MAX_NAMED_CHUNKS = 5
+
+# "What mobile apps have you built?" -> the category's list section + its project sections.
+# Only when the question is about work (projects/apps/built...), so "do you know React Native?"
+# alone doesn't pull in every app.
+_WORK_WORDS = re.compile(r"\b(projects?|projets?|apps?|applications?|built|build|made|developed|created|"
+                         r"réalis\w*|fait\w*|cré\w*|développ\w*|works?|travaux|portfolio|websites?|sites?)\b", re.I)
+_CATEGORIES = [
+    (re.compile(r"\b(mobiles?|ios|android|react native|expo)\b", re.I), "Mobile app", "list of my 4 mobile apps"),
+    (re.compile(r"\b(web|websites?|sites?|web ?apps?)\b", re.I), "Web project", "list of my 7 web projects"),
+    (re.compile(r"\b(machine learning|ml|ai|ia|intelligence artificielle|apprentissage automatique|"
+                r"data science|predictions?|prédictions?)\b", re.I), "ML & AI project", "list of my 3 ML & AI projects"),
+    (re.compile(r"\b(designs?|figma|ui|ux)\b", re.I), "Design projects", "list of my 4 design projects"),
+]
+
+
+def _norm(text):
+    return " " + re.sub(r"[\s_\-]+", " ", re.sub(r"[^\w\s\-]", " ", text.lower())).strip() + " "
 
 OFFLINE_PREFIX = "My AI brain is resting right now, but here is what I know about that:\n\n"
 
@@ -92,6 +121,9 @@ _OFFTOPIC_REQUEST = re.compile(
     r".*\b(jokes?|blagues?|poems?|poèmes?|poemes?|songs?|chansons?|recipes?|recettes?|essays?|dissertations?)\b",
     re.I)
 _FOLLOW_UP_WORDS = 6  # questions this short, mid-conversation, are searched with the previous one
+# ...as are questions that point back at the conversation ("more details on these projects").
+_REFERS_BACK = re.compile(r"\b(these|those|them|they|it|its|this one|that one|more|the projects?|"
+                          r"ces|ceux|celles|eux|ça|cela|celui|celle|plus de|davantage|les projets?)\b", re.I)
 
 _FRENCH_HINTS = re.compile(
     r"[àâçéèêëîïôûùüÿœ]|\b(je|tu|il|nous|vous|est|es|suis|qui|quoi|quel|quels|quelle|quelles|comment|pourquoi|"
@@ -206,8 +238,41 @@ class SidickBot:
         ensure_models()
         self.vectors = self._chunk_vectors()
         self.cache = {}  # repeated first questions (e.g. example buttons) are answered instantly
-        print(f"Loaded {len(self.chunks)} knowledge chunks. Chat: {CHAT_MODEL}, embeddings: {EMBED_MODEL}",
-              flush=True)
+        self.project_index = self._build_project_index()
+        self.category_chunks = [
+            (pattern, [i for i, c in enumerate(self.chunks) if c.startswith(f"## Portfolio: {list_title}")]
+             + [i for i, c in enumerate(self.chunks) if c.startswith(f"## {prefix}")])
+            for pattern, prefix, list_title in _CATEGORIES
+        ]
+        print(f"Loaded {len(self.chunks)} knowledge chunks, {len(self.project_index)} project names. "
+              f"Chat: {CHAT_MODEL}, embeddings: {EMBED_MODEL}", flush=True)
+
+    def _build_project_index(self):
+        """normalized project name -> chunk index; portfolio/profile entries win over GitHub READMEs."""
+        index = {}
+        for i, chunk in enumerate(self.chunks):
+            m = _PROJECT_HEADING.match(chunk.split("\n", 1)[0])
+            if not m:
+                continue
+            name = _norm(m.group(2))
+            if len(name.strip()) < 3 or name.strip() in _GENERIC_NAMES:
+                continue
+            curated = m.group(1) != "GitHub project"
+            # keep the first chunk of each name; a curated entry replaces a GitHub one
+            if name not in index or (curated and not index[name][1]):
+                index[name] = (i, curated)
+        return index
+
+    def mentioned_projects(self, text):
+        """Chunk indexes of projects named in `text` (in order), or of a project category it asks about."""
+        t = _norm(text)
+        found = sorted((t.find(name), i) for name, (i, _) in self.project_index.items() if name in t)
+        picked = [i for _, i in found]
+        if _WORK_WORDS.search(text):
+            for pattern, indexes in self.category_chunks:
+                if pattern.search(text):
+                    picked += indexes
+        return list(dict.fromkeys(picked))
 
     def _chunk_vectors(self):
         """Embed all chunks once and cache them on disk; re-embed only when knowledge changes."""
@@ -249,18 +314,32 @@ class SidickBot:
             return "offtopic", []
 
         scores, semantic = self._scores(question)
-        # Follow-ups ("tell me more", "and the second one?") mean little on their own: search them
-        # together with the visitor's previous question, both for the guard and for the context.
+        named = self.mentioned_projects(question)
+        # Follow-ups ("tell me more", "give more details on the projects") mean little on their own:
+        # search them together with the visitor's previous question, and pull in the projects the
+        # previous answer named, both for the guard and for the context.
         previous = [m["content"] for m in history_messages if m["role"] == "user"]
-        if previous and (len(question.split()) <= _FOLLOW_UP_WORDS or scores.max() < OFFTOPIC_THRESHOLD):
+        is_follow_up = previous and (len(question.split()) <= _FOLLOW_UP_WORDS or _REFERS_BACK.search(question)
+                                     or scores.max() < OFFTOPIC_THRESHOLD)
+        if is_follow_up:
             combined, _ = self._scores(previous[-1] + " " + question)
             if combined.max() >= scores.max() or scores.max() < OFFTOPIC_THRESHOLD:
                 scores = combined
-        if semantic and scores.max() < OFFTOPIC_THRESHOLD:
+            if not named:
+                answers = [m["content"] for m in history_messages if m["role"] == "assistant"]
+                named = self.mentioned_projects(previous[-1] + " " + (answers[-1] if answers else ""))
+        if semantic and not named and scores.max() < OFFTOPIC_THRESHOLD:
             print(f"[guard] off-topic ({scores.max():.3f}): {question[:80]!r}", flush=True)
             return "offtopic", []
-        top = np.argsort(scores)[::-1][:TOP_K]
-        return None, [(self.chunks[i], float(scores[i])) for i in top]
+        # Named projects first (exact sections), then the best semantic matches.
+        picked = named[:MAX_NAMED_CHUNKS]
+        limit = max(TOP_K, len(picked) + 2)  # at most 5 named + 2 semantic = 7 chunks
+        for i in np.argsort(scores)[::-1]:
+            if len(picked) >= limit:
+                break
+            if int(i) not in picked:
+                picked.append(int(i))
+        return None, [(self.chunks[i], float(scores[i])) for i in picked]
 
     def _keyword_scores(self, question):
         words = {w for w in re.findall(r"\w{3,}", question.lower())}
@@ -270,7 +349,17 @@ class SidickBot:
         # Always include the identity chunks so "Who are you?" works even when similarity is weak.
         chunks = [c for c, _ in (retrieved if retrieved is not None else self.retrieve(question))]
         always = [c for c in self.chunks[:2] if c not in chunks]
-        return f"{SYSTEM_PROMPT}\n\nCONTEXT:\n" + "\n\n".join(always + chunks) + f"\n\n{PROMPT_REMINDER}"
+        # Name the projects that actually have details here: a 3B model otherwise "fills in" others
+        # it saw in the conversation (e.g. inventing a tech stack for a project not in the CONTEXT).
+        names = [m.group(2) for c in chunks if (m := _PROJECT_HEADING.match(c.split("\n", 1)[0]))]
+        names = list(dict.fromkeys(names))
+        projects_note = (
+            f"\nProjects described in the CONTEXT: {', '.join(names)}. Only describe these. "
+            "If the visitor asked about other projects, just list their names and invite them to ask about one."
+            if names else ""
+        )
+        return (f"{SYSTEM_PROMPT}\n\nCONTEXT:\n" + "\n\n".join(always + chunks)
+                + f"\n\n{PROMPT_REMINDER}{projects_note}")
 
     @staticmethod
     def _history_messages(history):
@@ -314,7 +403,7 @@ class SidickBot:
                     "messages": messages,
                     "stream": True,
                     "keep_alive": KEEP_ALIVE,
-                    "options": {"num_predict": MAX_ANSWER_TOKENS, "num_ctx": CONTEXT_TOKENS, "temperature": 0.3},
+                    "options": {"num_predict": MAX_ANSWER_TOKENS, "num_ctx": CONTEXT_TOKENS, "temperature": 0.1},
                 },
                 stream=True,
                 timeout=(10, 300),
