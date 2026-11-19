@@ -5,14 +5,13 @@
       "name": "chat-api",
       "runtimeExecutable": "/Users/sidick/Desktop/Projects/sidick-chatbot/venv/bin/uvicorn",
       "runtimeArgs": ["server:app", "--port", "8000", "--app-dir", "/Users/sidick/Desktop/Projects/sidick-chatbot"],
-      "env": {"ALLOWED_ORIGINS": "https://sidick.vercel.app,http://localhost:8765"},
       "port": 8000
     },
     {
-      "name": "test-site",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "/private/tmp/claude-501/-Users-sidick--claude-spares-spare-a1Ofwa/6609b358-5a18-4169-a23e-e13151127e3f/scratchpad/site"],
-      "port": 8765
+      "name": "portfolio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/sidick/Desktop/Projects/SidickPortfolio", "run", "dev", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
     }
   ]
 }
