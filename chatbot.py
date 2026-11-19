@@ -1,34 +1,51 @@
-"""Sidick's personal chatbot: a small RAG (retrieval-augmented generation) pipeline.
+"""Sidick's personal chatbot: a small RAG (retrieval-augmented generation) pipeline on Ollama.
 
-Pipeline: load knowledge -> chunk -> embed -> retrieve top-k by cosine similarity
--> build a first-person prompt -> ask an LLM (with model fallback and an offline fallback).
+Pipeline: load knowledge -> chunk -> embed (Ollama) -> retrieve top-k by cosine similarity
+-> build a first-person prompt -> stream an answer from a local Ollama model.
+No external API: everything runs on your own machine or server.
+If Ollama is unreachable, the bot still answers straight from the best-matching knowledge chunks.
 """
+import hashlib
+import json
 import os
 import re
 from pathlib import Path
 
 import numpy as np
+import requests
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
 
-load_dotenv()  # reads GEMINI_API_KEY etc. from a .env file next to this script
+ROOT = Path(__file__).parent
+load_dotenv(ROOT / ".env")
 
-KNOWLEDGE_DIR = Path(__file__).parent / "knowledge"
+KNOWLEDGE_DIR = Path(os.getenv("KNOWLEDGE_DIR", ROOT / "knowledge"))
+CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / ".cache"))
 PROFILE_FILE = "profile.md"  # loaded first: its opening chunks are always sent as identity context
-EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-MAX_CHUNK_CHARS = 1200
-HISTORY_TURNS = 6  # only the last N messages are sent, to save tokens/quota
-# Tried in order when one hits its quota; *-lite models have a larger free quota.
-DEFAULT_MODELS = "gemini-flash-latest,gemini-flash-lite-latest,gemini-2.5-flash"
 
-SYSTEM_PROMPT = """You are Sidick Abdoulaye Hissein (also known as Sidick Sino). You are his personal AI twin, \
-speaking in the first person as Sidick, on his portfolio website.
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "qwen2.5:3b")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "bge-m3")  # multilingual: works for English and French
+KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "24h")  # keep models in memory -> no reload delay
+MAX_ANSWER_TOKENS = int(os.getenv("MAX_ANSWER_TOKENS", "350"))
+CONTEXT_TOKENS = int(os.getenv("CONTEXT_TOKENS", "4096"))
+
+MAX_CHUNK_CHARS = 1200
+HISTORY_TURNS = 6  # only the last N messages are sent, to keep prompts short (= faster on CPU)
+TOP_K = 5
+
+SYSTEM_PROMPT = """You are Sidick Abdoulaye Hissein (also known as Sidick Sino). You are his personal AI \
+assistant on his portfolio website, and you speak in the first person as Sidick.
 Rules:
 - Answer ONLY from the CONTEXT below. If the answer is not there, say you are not sure and suggest \
-contacting Sidick through his portfolio, GitHub or LinkedIn. Never invent facts.
-- Be friendly, concise and natural. Reply in the language the visitor uses (English or French).
+contacting Sidick through the contact form on his portfolio, GitHub or LinkedIn. Never invent facts.
+- Be friendly, concise and natural: at most about 100 words.
+- Reply in the language the visitor uses (English or French).
 - If asked "Who are you?", introduce yourself as Sidick."""
 
+OFFLINE_PREFIX = "My AI brain is resting right now, but here is what I know about that:\n\n"
+
+
+# ---------------------------------------------------------------- knowledge loading
 
 def _extract_text(content):
     """Gradio may give message content as a str, a list of parts, a dict or an object with .text."""
@@ -94,91 +111,139 @@ def load_chunks():
     return chunks
 
 
+# ---------------------------------------------------------------- Ollama helpers
+
+def ensure_models(models=(CHAT_MODEL, EMBED_MODEL)):
+    """Download any missing model into Ollama (first start on a new server takes a few minutes)."""
+    tags = requests.get(f"{OLLAMA_URL}/api/tags", timeout=10).json().get("models", [])
+    have = {m["name"] for m in tags} | {m["name"].removesuffix(":latest") for m in tags}
+    for model in models:
+        if model not in have:
+            print(f"Pulling {model} into Ollama (one-time download)...", flush=True)
+            r = requests.post(f"{OLLAMA_URL}/api/pull", json={"model": model, "stream": False}, timeout=3600)
+            r.raise_for_status()
+
+
+def embed(texts, batch=32):
+    vectors = []
+    for i in range(0, len(texts), batch):
+        r = requests.post(
+            f"{OLLAMA_URL}/api/embed",
+            json={"model": EMBED_MODEL, "input": texts[i:i + batch], "keep_alive": KEEP_ALIVE},
+            timeout=600,
+        )
+        r.raise_for_status()
+        vectors.extend(r.json()["embeddings"])
+    v = np.asarray(vectors, dtype=np.float32)
+    return v / np.linalg.norm(v, axis=1, keepdims=True)  # normalized -> dot product == cosine
+
+
+# ---------------------------------------------------------------- the bot
+
 class SidickBot:
     def __init__(self):
         self.chunks = load_chunks()
-        self.model = SentenceTransformer(EMBED_MODEL)
-        # normalized vectors -> dot product == cosine similarity
-        self.vectors = self.model.encode(self.chunks, normalize_embeddings=True)
-        self.cache = {}  # repeated first questions (e.g. the example buttons) never hit the API again
-        self.models = [m.strip() for m in os.getenv("CHAT_MODELS", DEFAULT_MODELS).split(",") if m.strip()]
-        print(f"Loaded {len(self.chunks)} knowledge chunks. Models: {', '.join(self.models)}")
+        ensure_models()
+        self.vectors = self._chunk_vectors()
+        self.cache = {}  # repeated first questions (e.g. example buttons) are answered instantly
+        print(f"Loaded {len(self.chunks)} knowledge chunks. Chat: {CHAT_MODEL}, embeddings: {EMBED_MODEL}",
+              flush=True)
 
-    def retrieve(self, question, k=5):
-        q = self.model.encode([question], normalize_embeddings=True)[0]
-        scores = self.vectors @ q
+    def _chunk_vectors(self):
+        """Embed all chunks once and cache them on disk; re-embed only when knowledge changes."""
+        key = hashlib.sha256((EMBED_MODEL + "\0" + "\0".join(self.chunks)).encode()).hexdigest()[:16]
+        path = CACHE_DIR / f"embeddings-{key}.npy"
+        if path.exists():
+            return np.load(path)
+        print(f"Embedding {len(self.chunks)} chunks with {EMBED_MODEL}...", flush=True)
+        vectors = embed(self.chunks)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        for old in CACHE_DIR.glob("embeddings-*.npy"):
+            old.unlink()
+        np.save(path, vectors)
+        return vectors
+
+    def retrieve(self, question, k=TOP_K):
+        try:
+            scores = self.vectors @ embed([question])[0]
+        except requests.RequestException:
+            scores = self._keyword_scores(question)  # Ollama down: crude word-overlap retrieval
         top = np.argsort(scores)[::-1][:k]
         return [(self.chunks[i], float(scores[i])) for i in top]
 
-    def build_prompt(self, question, k=5):
+    def _keyword_scores(self, question):
+        words = {w for w in re.findall(r"\w{3,}", question.lower())}
+        return np.array([sum(w in c.lower() for w in words) for c in self.chunks], dtype=np.float32)
+
+    def build_system_prompt(self, question):
         # Always include the identity chunks so "Who are you?" works even when similarity is weak.
-        retrieved = [c for c, _ in self.retrieve(question, k)]
+        retrieved = [c for c, _ in self.retrieve(question)]
         always = [c for c in self.chunks[:2] if c not in retrieved]
-        context = "\n\n".join(always + retrieved)
-        return f"{SYSTEM_PROMPT}\n\nCONTEXT:\n{context}"
+        return f"{SYSTEM_PROMPT}\n\nCONTEXT:\n" + "\n\n".join(always + retrieved)
 
     @staticmethod
-    def _to_contents(history, question):
-        from google.genai import types
-
-        # Gradio history uses roles "user"/"assistant"; Gemini expects "user"/"model".
-        contents = []
-        for m in history:
+    def _history_messages(history):
+        messages = []
+        for m in list(history or [])[-HISTORY_TURNS:]:
             role = m["role"] if isinstance(m, dict) else getattr(m, "role", "user")
             raw = m["content"] if isinstance(m, dict) else getattr(m, "content", "")
             text = _extract_text(raw)
             if text:
-                contents.append(
-                    types.Content(
-                        role="model" if role == "assistant" else "user",
-                        parts=[types.Part(text=text)],
-                    )
-                )
-        contents.append(types.Content(role="user", parts=[types.Part(text=question)]))
-        return contents
+                messages.append({"role": "assistant" if role == "assistant" else "user", "content": text})
+        return messages
 
-    def _offline_answer(self, question):
-        """No LLM available (quota/network): answer straight from the best matching chunks."""
+    def offline_answer(self, question):
         best = [c for c, _ in self.retrieve(question, k=2)]
-        body = "\n\n".join(re.sub(r"^#+\s*", "", c, flags=re.M) for c in best)
-        return "My AI brain is resting right now (API limit reached), but here is what I know about that:\n\n" + body
+        return OFFLINE_PREFIX + "\n\n".join(re.sub(r"^#+\s*", "", c, flags=re.M) for c in best)
+
+    def stream_answer(self, question, history=None):
+        """Yield the answer piece by piece (so visitors see text appear while a CPU server thinks)."""
+        question = _extract_text(question).strip()
+        key = question.lower()
+        if not history and key in self.cache:
+            yield self.cache[key]
+            return
+
+        messages = [{"role": "system", "content": self.build_system_prompt(question)}]
+        messages += self._history_messages(history)
+        messages.append({"role": "user", "content": question})
+
+        parts = []
+        try:
+            with requests.post(
+                f"{OLLAMA_URL}/api/chat",
+                json={
+                    "model": CHAT_MODEL,
+                    "messages": messages,
+                    "stream": True,
+                    "keep_alive": KEEP_ALIVE,
+                    "options": {"num_predict": MAX_ANSWER_TOKENS, "num_ctx": CONTEXT_TOKENS, "temperature": 0.3},
+                },
+                stream=True,
+                timeout=(10, 300),
+            ) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    if data.get("error"):
+                        raise RuntimeError(data["error"])
+                    piece = data.get("message", {}).get("content", "")
+                    if piece:
+                        parts.append(piece)
+                        yield piece
+                    if data.get("done"):
+                        break
+        except (requests.RequestException, RuntimeError, ValueError) as e:
+            print(f"[warn] Ollama failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
+            if not parts:  # nothing sent yet -> fall back to a retrieval-only answer
+                yield self.offline_answer(question)
+            return
+
+        text = "".join(parts)
+        if text and not history:
+            self.cache[key] = text
 
     def answer(self, question, history=None):
-        import httpx  # installed with google-genai
-        from google import genai  # pip install google-genai
-        from google.genai import errors as genai_errors
-        from google.genai import types
-
-        question = _extract_text(question)
-        key = question.strip().lower()
-        if not history and key in self.cache:
-            return self.cache[key]
-
-        client = genai.Client(
-            api_key=os.environ["GEMINI_API_KEY"],
-            http_options={"api_version": "v1beta"},  # system_instruction needs v1beta
-        )
-        contents = self._to_contents(list(history or [])[-HISTORY_TURNS:], question)
-        config = types.GenerateContentConfig(
-            system_instruction=self.build_prompt(question),
-            max_output_tokens=600,
-        )
-
-        for model in self.models:
-            try:
-                reply = client.models.generate_content(model=model, contents=contents, config=config)
-            except genai_errors.APIError as e:
-                # 429 = quota exhausted, 5xx = overloaded, 404 = model not available: try the next model.
-                # Anything else (e.g. 400/403 bad API key) is a real bug, so let it surface.
-                if e.code == 429 or e.code == 404 or e.code >= 500:
-                    print(f"[warn] {model} failed ({e.code}): {str(e)[:150]}")
-                    continue
-                raise
-            except (httpx.TransportError, OSError) as e:  # network down / timeout
-                print(f"[warn] {model} network error: {e}")
-                continue
-            if reply.text:
-                if not history:
-                    self.cache[key] = reply.text
-                return reply.text
-        return self._offline_answer(question)
+        return "".join(self.stream_answer(question, history))

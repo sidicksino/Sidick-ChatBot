@@ -1,7 +1,7 @@
-sentence-transformers
+# Server (also used by the Docker image)
+fastapi
+uvicorn
 numpy
-gradio
-google-genai
-python-dotenv
 requests
+python-dotenv
 pypdf

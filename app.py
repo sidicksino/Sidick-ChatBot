@@ -1,3 +1,4 @@
+"""Local test UI (Gradio). For the portfolio, server.py + widget/sidick-widget.js are used instead."""
 import gradio as gr
 
 from chatbot import SidickBot
@@ -6,7 +7,10 @@ bot = SidickBot()
 
 
 def respond(message, history):
-    return bot.answer(message, history)
+    text = ""
+    for piece in bot.stream_answer(message, history):
+        text += piece
+        yield text
 
 
 gr.ChatInterface(

@@ -1,0 +1,49 @@
+# One command on the server:  docker compose up -d --build
+# Starts Ollama (the AI), the chatbot API, and Caddy (automatic HTTPS for your DOMAIN).
+services:
+  ollama:
+    image: ollama/ollama
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_NUM_PARALLEL: 1
+      OLLAMA_MAX_LOADED_MODELS: 2
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      retries: 30
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      CACHE_DIR: /app/.cache
+    volumes:
+      - ./knowledge:/app/knowledge:ro   # edit knowledge/ then: docker compose restart api
+      - cache:/app/.cache
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env, e.g. sidick-bot.duckdns.org}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - api
+
+volumes:
+  ollama:
+  cache:
+  caddy_data:

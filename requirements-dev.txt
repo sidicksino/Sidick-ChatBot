@@ -1,0 +1,3 @@
+# Local extras: Gradio test UI
+-r requirements.txt
+gradio
