@@ -1,14 +1,20 @@
-"""Sidick's personal chatbot: a small RAG (retrieval-augmented generation) pipeline on Ollama.
+"""Sidick's personal chatbot: a small RAG (retrieval-augmented generation) pipeline.
 
-Pipeline: load knowledge -> chunk -> embed (Ollama) -> retrieve top-k by cosine similarity
--> build a first-person prompt -> stream an answer from a local Ollama model.
-No external API: everything runs on your own machine or server.
-If Ollama is unreachable, the bot still answers straight from the best-matching knowledge chunks.
+Pipeline: load knowledge -> chunk -> retrieve the best chunks -> build a first-person prompt -> stream an answer.
+
+Two ways to run it, picked with LLM_PROVIDER in .env:
+- "ollama" (default): everything local. bge-m3 embeddings for retrieval, qwen2.5:3b for answers.
+  Needs ~4GB of RAM (your Mac, or the Oracle Cloud server in the README).
+- "openai": any OpenAI-compatible chat API (Groq by default; xAI's Grok works too). Retrieval switches to
+  keyword search (BM25), because Groq has no embeddings: no model runs on the server, so it fits Render's
+  free 512MB instance.
+If the model can't be reached, the bot still answers straight from the best-matching knowledge chunks.
 """
 import hashlib
 import json
 import os
 import re
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -22,8 +28,20 @@ KNOWLEDGE_DIR = Path(os.getenv("KNOWLEDGE_DIR", ROOT / "knowledge"))
 CACHE_DIR = Path(os.getenv("CACHE_DIR", ROOT / ".cache"))
 PROFILE_FILE = "profile.md"  # loaded first: its opening chunks are always sent as identity context
 
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+if LLM_PROVIDER not in ("ollama", "openai"):
+    raise ValueError(f"LLM_PROVIDER must be 'ollama' or 'openai', not {LLM_PROVIDER!r}")
+USE_OLLAMA = LLM_PROVIDER == "ollama"
+
+# Hosted API (LLM_PROVIDER=openai). Defaults are Groq's; for xAI use https://api.x.ai/v1 and a grok model.
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+if not USE_OLLAMA and not LLM_API_KEY:
+    raise ValueError("LLM_PROVIDER=openai needs LLM_API_KEY (your Groq key) in .env or the host's settings")
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-CHAT_MODEL = os.getenv("CHAT_MODEL", "qwen2.5:3b")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "qwen2.5:3b") if USE_OLLAMA else LLM_MODEL
 EMBED_MODEL = os.getenv("EMBED_MODEL", "bge-m3")  # multilingual: works for English and French
 KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "24h")  # keep models in memory -> no reload delay
 # 350 cut French answers off mid-sentence (French runs ~25% longer); the prompt still asks for ~120 words.
@@ -396,11 +414,66 @@ def embed(texts, batch=32):
 
 # ---------------------------------------------------------------- the bot
 
+# Words too common to say what a question is about (they made long GitHub READMEs win every search).
+_STOPWORDS = set("""a an the and or but if of to in on at for from by with about as is are was were be been am do does did
+have has had will would can could should may might i me my mine you your yours yourself he she it its we our they
+them their this that these those what which who whom whose when where why how all any some more most much many
+very just also not no yes so than too there here please tell give show know want need get got like
+le la les un une des du de d l et ou mais si à au aux en dans sur pour par avec sans sous est es suis sont être
+ai as a avez ont avoir je j tu toi te t il elle on nous vous ils elles me m mon ma mes ton ta tes son sa ses notre
+votre vos leur leurs ce cet cette ces qui que qu quoi quel quelle quels quelles où quand comment pourquoi combien
+ne pas plus très aussi bien moi lui y donne donner dis montre parle""".split())
+
+
+def _stem(word):
+    """Tiny English/French suffix stripper: "studies"/"study"/"studying" all become "stud"."""
+    for suffix in ("ations", "ation", "ements", "ement", "ities", "ity", "ies", "ing", "ers", "er", "ed", "es", "s", "y"):
+        if len(word) > len(suffix) + 2 and word.endswith(suffix):
+            return word[: -len(suffix)]
+    return word
+
+
+def _tokens(text):
+    return [_stem(w) for w in re.findall(r"\w+", text.lower()) if w not in _STOPWORDS and len(w) > 1]
+
+
+class BM25:
+    """Keyword ranking for API mode (no embedding model on the server). Standard Okapi BM25."""
+
+    def __init__(self, docs, k1=1.5, b=0.75):
+        self.k1, self.b = k1, b
+        self.docs = [Counter(_tokens(d)) for d in docs]
+        self.lengths = np.array([sum(d.values()) for d in self.docs], dtype=np.float32)
+        self.avg = float(self.lengths.mean()) if len(docs) else 1.0
+        df = Counter(t for d in self.docs for t in d)
+        n = len(docs)
+        self.idf = {t: float(np.log(1 + (n - f + 0.5) / (f + 0.5))) for t, f in df.items()}
+
+    def scores(self, query):
+        out = np.zeros(len(self.docs), dtype=np.float32)
+        for term in set(_tokens(query)):
+            idf = self.idf.get(term)
+            if not idf:
+                continue
+            for i, d in enumerate(self.docs):
+                tf = d.get(term)
+                if tf:
+                    out[i] += idf * tf * (self.k1 + 1) / (tf + self.k1 * (1 - self.b + self.b * self.lengths[i] / self.avg))
+        return out
+
+
 class SidickBot:
     def __init__(self):
         self.chunks = load_chunks()
-        ensure_models()
-        self.vectors = self._chunk_vectors()
+        if USE_OLLAMA:
+            ensure_models()
+            self.vectors = self._chunk_vectors()
+        else:
+            self.vectors = None
+            self.bm25 = BM25(self.chunks)
+            # Sidick's own pages (profile, portfolio, projects) outrank raw GitHub READMEs.
+            self.keyword_weight = np.array([0.5 if c.startswith("## GitHub project:") else 1.0 for c in self.chunks],
+                                           dtype=np.float32)
         self.cache = {}  # repeated first questions (e.g. example buttons) are answered instantly
         self.project_index = self._build_project_index()
         self.contact = parse_contact("\n".join(self.chunks))
@@ -422,8 +495,9 @@ class SidickBot:
                 firsts.setdefault(name.split()[0], set()).add(i)
         self.short_names = {w: next(iter(ids)) for w, ids in firsts.items() if len(ids) == 1}
         self.links_chunk = next((i for i, c in enumerate(self.chunks) if c.startswith(f"## {_LINKS_TITLE}")), None)
+        search = f"embeddings: {EMBED_MODEL}" if USE_OLLAMA else "search: keywords (BM25)"
         print(f"Loaded {len(self.chunks)} knowledge chunks, {len(self.project_index)} project names. "
-              f"Chat: {CHAT_MODEL}, embeddings: {EMBED_MODEL}", flush=True)
+              f"Chat: {LLM_PROVIDER}/{CHAT_MODEL}, {search}", flush=True)
 
     def contact_card(self, lang):
         labels = CARD_LABELS[lang]
@@ -475,7 +549,12 @@ class SidickBot:
         return vectors
 
     def _scores(self, question):
-        """Similarity of the question to every chunk. Second value: True if semantic (Ollama up)."""
+        """Similarity of the question to every chunk. Second value: True if semantic (Ollama up).
+
+        Keyword scores are not on the same scale, so the semantic off-topic guard is skipped for them;
+        the regex guards and the prompt still decline off-topic questions."""
+        if not USE_OLLAMA:
+            return self.bm25.scores(question) * self.keyword_weight, False
         try:
             return self.vectors @ embed([question])[0], True
         except requests.RequestException:
@@ -646,7 +725,23 @@ class SidickBot:
 
         parts = []
         try:
-            with requests.post(
+            stream = self._stream_ollama(messages) if USE_OLLAMA else self._stream_openai(messages)
+            for piece in stream:
+                parts.append(piece)
+                yield piece
+        except (requests.RequestException, RuntimeError, ValueError) as e:
+            print(f"[warn] {LLM_PROVIDER} failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
+            if not parts:  # nothing sent yet -> fall back to a retrieval-only answer
+                yield self.offline_answer(question)
+            return
+
+        text = "".join(parts)
+        if text and not history:
+            self.cache[key] = text
+
+    @staticmethod
+    def _stream_ollama(messages):
+        with requests.post(
                 f"{OLLAMA_URL}/api/chat",
                 json={
                     "model": CHAT_MODEL,
@@ -657,29 +752,47 @@ class SidickBot:
                 },
                 stream=True,
                 timeout=(10, 300),
-            ) as r:
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if not line:
-                        continue
-                    data = json.loads(line)
-                    if data.get("error"):
-                        raise RuntimeError(data["error"])
-                    piece = data.get("message", {}).get("content", "")
-                    if piece:
-                        parts.append(piece)
-                        yield piece
-                    if data.get("done"):
-                        break
-        except (requests.RequestException, RuntimeError, ValueError) as e:
-            print(f"[warn] Ollama failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
-            if not parts:  # nothing sent yet -> fall back to a retrieval-only answer
-                yield self.offline_answer(question)
-            return
+        ) as r:
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                if data.get("error"):
+                    raise RuntimeError(data["error"])
+                piece = data.get("message", {}).get("content", "")
+                if piece:
+                    yield piece
+                if data.get("done"):
+                    break
 
-        text = "".join(parts)
-        if text and not history:
-            self.cache[key] = text
+    @staticmethod
+    def _stream_openai(messages):
+        """OpenAI-compatible streaming (Groq, xAI...): server-sent events ending with "data: [DONE]"."""
+        with requests.post(
+                f"{LLM_BASE_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {LLM_API_KEY}"},
+                json={"model": LLM_MODEL, "messages": messages, "stream": True,
+                      "max_tokens": MAX_ANSWER_TOKENS, "temperature": 0.2},
+                stream=True,
+                timeout=(10, 60),
+        ) as r:
+            if r.status_code == 429:
+                raise RuntimeError("rate limited by the API (free-tier limit reached)")
+            r.raise_for_status()
+            for line in r.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                event = json.loads(data)
+                if event.get("error"):
+                    raise RuntimeError(str(event["error"]))
+                choices = event.get("choices") or [{}]
+                piece = (choices[0].get("delta") or {}).get("content")
+                if piece:
+                    yield piece
 
     def answer(self, question, history=None, page_lang=None):
         return "".join(self.stream_answer(question, history, page_lang))

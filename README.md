@@ -1,7 +1,7 @@
 # Sidick-ChatBot
 
-A personal AI assistant for my portfolio (https://www.sidickabdoulaye.com). It's a small RAG chatbot that runs fully on
-**Ollama**, with no external AI API and no quota.
+A personal AI assistant for my portfolio (https://www.sidickabdoulaye.com). It's a small RAG chatbot that runs either
+fully on **Ollama** (no external AI API, no quota) or on a hosted API such as **Groq** (see "Choose the AI").
 
 ```
 Portfolio (Vercel)  ──HTTPS──▶  Caddy  ──▶  server.py (FastAPI)  ──▶  Ollama
@@ -52,6 +52,33 @@ venv/bin/python eval/run_eval.py contact  # only cases whose question contains "
 
 Failures are printed; every answer is saved to `eval/last_report.md`. Add a case to `eval/run_eval.py`
 whenever a real visitor question goes wrong, so it stays fixed.
+
+## Choose the AI: hosted API or Ollama
+
+One setting in `.env` (or the host's environment), nothing else changes:
+
+| `LLM_PROVIDER` | Answers from | Finds facts with | Needs |
+|---|---|---|---|
+| `ollama` (default) | `qwen2.5:3b` on your server | `bge-m3` embeddings | ~4GB RAM (Mac, Oracle VM) |
+| `openai` | any OpenAI-compatible API: Groq (default), xAI Grok… | keyword search (BM25) | an API key, ~100MB RAM |
+
+The canned replies, guards, project lookups and contact card work the same in both modes.
+
+## Deploy now: Render free plan + Groq
+
+1. Create a free key at https://console.groq.com/keys.
+2. Push this repo to GitHub. In Render: **New → Blueprint**, pick the repo. `render.yaml` sets everything up.
+3. When Render asks for `LLM_API_KEY`, paste the Groq key. Deploy.
+4. Check `https://<your-service>.onrender.com/health` returns `{"status": "ok", ...}`.
+5. In Vercel (SidickPortfolio): **Settings → Environment Variables → `VITE_CHAT_API_URL`** = that onrender.com
+   address, then redeploy. The chat bubble appears on the site.
+
+The free plan sleeps after 15 minutes without visitors; the first message after that waits ~30-60s.
+The widget pings `/health` when the page loads, so the server is usually awake by the time someone types.
+Groq's free tier allows roughly 30 requests and 8K tokens per minute per model; if it's exceeded, the bot
+answers from its knowledge directly instead of failing.
+
+Later, to move to Ollama: deploy on Oracle as below, then change `VITE_CHAT_API_URL` in Vercel to the new address.
 
 ## Deploy (free: Oracle Cloud Always Free + DuckDNS)
 

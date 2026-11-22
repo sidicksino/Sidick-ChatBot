@@ -1,0 +1,27 @@
+# Render Blueprint: Dashboard -> New -> Blueprint -> pick this repo.
+# Runs the chatbot API on Render's free plan with a hosted model (Groq). No Ollama here: the free
+# instance has 512MB of RAM, and Ollama's models need ~4GB. When the Oracle server is ready, deploy the
+# Docker setup there instead (see README) and point the portfolio's VITE_CHAT_API_URL at it.
+services:
+  - type: web
+    name: sidick-chatbot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # --proxy-headers: Render sits in front, so the visitor's IP comes from X-Forwarded-For.
+    # Without it every visitor would share one rate limit (the proxy's IP).
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips "*"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_API_KEY
+        sync: false # paste your Groq key in the Render dashboard; never commit it
+      - key: ALLOWED_ORIGINS
+        value: https://www.sidickabdoulaye.com,https://sidickabdoulaye.com,https://sidick.vercel.app
