@@ -442,6 +442,26 @@ def _stem(word):
     return word
 
 
+def check_api_model():
+    """At startup in API mode, ask the API which models this key can use and log it, so a wrong LLM_MODEL
+    shows up in the logs right away (Groq answers 404 for a model the account can't use)."""
+    try:
+        r = requests.get(f"{LLM_BASE_URL}/models", headers={"Authorization": f"Bearer {LLM_API_KEY}"}, timeout=15)
+        if r.status_code in (401, 403):
+            print("[warn] the API rejected LLM_API_KEY (HTTP %d): check the key" % r.status_code, flush=True)
+            return
+        r.raise_for_status()
+        ids = sorted(m.get("id", "") for m in r.json().get("data", []))
+    except (requests.RequestException, ValueError) as e:
+        print(f"[warn] could not list the API's models: {type(e).__name__}: {str(e)[:200]}", flush=True)
+        return
+    if LLM_MODEL in ids:
+        print(f"API model OK: {LLM_MODEL}", flush=True)
+    else:
+        print(f"[warn] LLM_MODEL={LLM_MODEL!r} is not available to this key. Set LLM_MODEL to one of: "
+              + ", ".join(ids), flush=True)
+
+
 def _tokens(text):
     return [_stem(w) for w in re.findall(r"\w+", text.lower()) if w not in _STOPWORDS and len(w) > 1]
 
@@ -478,6 +498,7 @@ class SidickBot:
             ensure_models()
             self.vectors = self._chunk_vectors()
         else:
+            check_api_model()
             self.vectors = None
             self.bm25 = BM25(self.chunks)
             # Sidick's own pages (profile, portfolio, projects) outrank raw GitHub READMEs.
@@ -748,7 +769,10 @@ class SidickBot:
                 hint = " -> the API rejected the key: check LLM_API_KEY"
             elif isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
                 hint = " -> unknown model or URL: check LLM_MODEL and LLM_BASE_URL"
-            print(f"[warn] {LLM_PROVIDER} failed: {type(e).__name__}: {str(e)[:200]}{hint}", flush=True)
+            detail = ""
+            if isinstance(e, requests.HTTPError) and e.response is not None:
+                detail = f" | API said: {e.response.text[:300]}"
+            print(f"[warn] {LLM_PROVIDER} failed: {type(e).__name__}: {str(e)[:200]}{hint}{detail}", flush=True)
             if not parts:  # nothing sent yet -> fall back to a retrieval-only answer
                 yield self.offline_answer(question, lang)
             return
@@ -787,16 +811,23 @@ class SidickBot:
     @staticmethod
     def _stream_openai(messages):
         """OpenAI-compatible streaming (Groq, xAI...): server-sent events ending with "data: [DONE]"."""
+        payload = {"model": LLM_MODEL, "messages": messages, "stream": True,
+                   "max_tokens": MAX_ANSWER_TOKENS, "temperature": 0.2}
+        if "gpt-oss" in LLM_MODEL:
+            # Reasoning models spend tokens "thinking" before they answer, and those count toward
+            # max_tokens: keep the thinking short and leave room for the answer.
+            payload.update(reasoning_effort="low", max_tokens=MAX_ANSWER_TOKENS + 700)
         with requests.post(
                 f"{LLM_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {LLM_API_KEY}"},
-                json={"model": LLM_MODEL, "messages": messages, "stream": True,
-                      "max_tokens": MAX_ANSWER_TOKENS, "temperature": 0.2},
+                json=payload,
                 stream=True,
                 timeout=(10, 60),
         ) as r:
             if r.status_code == 429:
                 raise RuntimeError("rate limited by the API (free-tier limit reached)")
+            if r.status_code >= 400:
+                r.content  # read the error body so the log can show the API's message  # noqa: B018
             r.raise_for_status()
             for line in r.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data:"):
