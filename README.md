@@ -60,9 +60,12 @@ One setting in `.env` (or the host's environment), nothing else changes:
 | `LLM_PROVIDER` | Answers from | Finds facts with | Needs |
 |---|---|---|---|
 | `ollama` (default) | `qwen2.5:3b` on your server | `bge-m3` embeddings | ~4GB RAM (Mac, Oracle VM) |
-| `openai` | any OpenAI-compatible API: Groq (default), xAI Grok… | keyword search (BM25) | an API key, ~100MB RAM |
+| `openai` | any OpenAI-compatible API: Groq (default), Google Gemini, xAI Grok… | keyword search (BM25) | an API key, ~100MB RAM |
 
 The canned replies, guards, project lookups and contact card work the same in both modes.
+
+For Gemini, set `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai`, `LLM_MODEL=gemini-2.5-flash`
+and `LLM_API_KEY` to a Google AI Studio key. At startup the logs list the models the key can use.
 
 ## Deploy now: Render free plan + Groq
 

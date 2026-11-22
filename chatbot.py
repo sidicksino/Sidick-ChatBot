@@ -33,7 +33,9 @@ if LLM_PROVIDER not in ("ollama", "openai"):
     raise ValueError(f"LLM_PROVIDER must be 'ollama' or 'openai', not {LLM_PROVIDER!r}")
 USE_OLLAMA = LLM_PROVIDER == "ollama"
 
-# Hosted API (LLM_PROVIDER=openai). Defaults are Groq's; for xAI use https://api.x.ai/v1 and a grok model.
+# Hosted API (LLM_PROVIDER=openai). Defaults are Groq's. Others that work the same way:
+#   Gemini: LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai  LLM_MODEL=gemini-2.5-flash
+#   xAI:    LLM_BASE_URL=https://api.x.ai/v1  LLM_MODEL=<a grok model id>
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
@@ -451,7 +453,8 @@ def check_api_model():
             print("[warn] the API rejected LLM_API_KEY (HTTP %d): check the key" % r.status_code, flush=True)
             return
         r.raise_for_status()
-        ids = sorted(m.get("id", "") for m in r.json().get("data", []))
+        # Gemini lists "models/gemini-2.5-flash" but is called with "gemini-2.5-flash".
+        ids = sorted(m.get("id", "").removeprefix("models/") for m in r.json().get("data", []))
     except (requests.RequestException, ValueError) as e:
         print(f"[warn] could not list the API's models: {type(e).__name__}: {str(e)[:200]}", flush=True)
         return
@@ -813,9 +816,9 @@ class SidickBot:
         """OpenAI-compatible streaming (Groq, xAI...): server-sent events ending with "data: [DONE]"."""
         payload = {"model": LLM_MODEL, "messages": messages, "stream": True,
                    "max_tokens": MAX_ANSWER_TOKENS, "temperature": 0.2}
-        if "gpt-oss" in LLM_MODEL:
-            # Reasoning models spend tokens "thinking" before they answer, and those count toward
-            # max_tokens: keep the thinking short and leave room for the answer.
+        if "gpt-oss" in LLM_MODEL or "gemini-2.5" in LLM_MODEL or "gemini-3" in LLM_MODEL:
+            # Reasoning models (Groq's gpt-oss, Gemini 2.5+) spend tokens "thinking" before they answer,
+            # and those count toward max_tokens: keep the thinking short and leave room for the answer.
             payload.update(reasoning_effort="low", max_tokens=MAX_ANSWER_TOKENS + 700)
         with requests.post(
                 f"{LLM_BASE_URL}/chat/completions",
