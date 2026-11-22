@@ -1,6 +1,6 @@
 # Sidick-ChatBot
 
-A personal AI assistant for my portfolio (https://sidick.vercel.app). It's a small RAG chatbot that runs fully on
+A personal AI assistant for my portfolio (https://www.sidickabdoulaye.com). It's a small RAG chatbot that runs fully on
 **Ollama**, with no external AI API and no quota.
 
 ```
@@ -8,7 +8,7 @@ Portfolio (Vercel)  ──HTTPS──▶  Caddy  ──▶  server.py (FastAPI) 
 widget/sidick-widget.js         (auto-HTTPS)   RAG over knowledge/      qwen2.5:3b + bge-m3
 ```
 
-- `knowledge/`: what the bot knows (`profile.md`, `portfolio.md`, `github.md`, plus any `.txt`/`.pdf`).
+- `knowledge/`: what the bot knows (`profile.md`, `portfolio.md`, `projects.md` (generated), `github.md`, plus any `.txt`/`.pdf`).
 - `chatbot.py`: chunking, Ollama embeddings (`bge-m3`, multilingual), retrieval, and the streamed answer from `qwen2.5:3b`.
   If Ollama is down, it answers straight from the best-matching knowledge.
   Off-topic questions ("Who is Messi?", "write me code", jokes) and small talk get an instant
@@ -33,8 +33,13 @@ origin (e.g. `http://localhost:5173`) to `ALLOWED_ORIGINS` in `.env`.
 ## Update the knowledge
 
 ```bash
+python ingest_portfolio.py         # refresh knowledge/projects.md from the portfolio dashboard
 python ingest_github.py            # refresh knowledge/github.md (set GITHUB_TOKEN for all READMEs)
 ```
+
+`knowledge/projects.md` is generated from the same API the portfolio uses
+(https://sidickportfolio.onrender.com/projects), so after editing a project in the dashboard, re-run
+`ingest_portfolio.py` and restart the bot. Don't edit that file by hand.
 
 Edit `knowledge/*.md` freely. Embeddings are recomputed automatically on the next start.
 
@@ -63,6 +68,7 @@ whenever a real visitor question goes wrong, so it stays fixed.
    ```html
    <script src="/sidick-widget.js" data-api="https://your-name.duckdns.org" defer></script>
    ```
-   Then redeploy on Vercel.
+   Then redeploy on Vercel. (The SidickPortfolio repo already loads the widget from `src/main.jsx`
+   whenever `VITE_CHAT_API_URL` is set: add that variable in Vercel instead of editing `index.html`.)
 
 After editing `knowledge/` on the server: `docker compose restart api`.

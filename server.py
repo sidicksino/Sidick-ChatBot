@@ -1,6 +1,6 @@
 """Public API for the portfolio chat widget.
 
-POST /chat   {"message": "...", "history": [{"role": "user"|"assistant", "content": "..."}]}
+POST /chat   {"message": "...", "history": [{"role": "user"|"assistant", "content": "..."}], "lang": "en"|"fr"}
              -> the answer streamed as plain text
 GET  /health -> {"status": "ok" | "loading", ...}
 
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 import chatbot
 
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://sidick.vercel.app").split(",")
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://www.sidickabdoulaye.com,https://sidickabdoulaye.com").split(",")
                    if o.strip()]
 MAX_MESSAGE_CHARS = int(os.getenv("MAX_MESSAGE_CHARS", "500"))
 RATE_PER_MINUTE = int(os.getenv("RATE_PER_MINUTE", "6"))     # per visitor
@@ -95,6 +95,8 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     history: list[Message] = Field(default_factory=list, max_length=40)
+    # The site's language. Only breaks ties: the bot answers in the language of the message itself.
+    lang: Literal["en", "fr"] | None = None
 
 
 @app.get("/health")
@@ -111,7 +113,7 @@ def chat(req: ChatRequest, request: Request):
     check_rate(request.client.host if request.client else "unknown")
     history = [m.model_dump() for m in req.history]
     return StreamingResponse(
-        bot.stream_answer(req.message, history),
+        bot.stream_answer(req.message, history, req.lang),
         media_type="text/plain; charset=utf-8",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )

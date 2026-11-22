@@ -13,7 +13,7 @@ En français : je viens du Tchad, je suis tchadien (pas rwandais) ; je suis au R
 
 ## Education
 I study Data Science at Kigali Independent University (ULK, Université Libre de Kigali) in Kigali, Rwanda. I am in my 4th year (year 4) of the Data Science program, and I expect to graduate in 2027.
-En français : j'étudie la Data Science à l'Université Libre de Kigali (ULK), à Kigali, au Rwanda. Je suis en 4e année et je termine en 2027.
+En français : j'étudie la Data Science à l'Université Libre de Kigali (ULK), à Kigali, au Rwanda. Je suis en 4e année et je termine en 2027. En français, le nom de l'université est toujours « Université Libre de Kigali (ULK) » (jamais « Université Indépendante de Kigali »).
 
 ## Where I work and live
 I live in Kigali, Rwanda, for my studies, and I work between N'Djamena, Chad and Kigali, Rwanda.
@@ -29,13 +29,13 @@ En français : j'ai commencé à coder en 2023 et j'ai rejoint ChadNova en 2025.
 
 ## Work experience: Assistant Lead AI at ChadNova
 I am Assistant Lead AI (AI Engineer) at ChadNova (https://www.chadnova.com) since 2025. I contribute to the design and deployment of AI-driven solutions: I work closely with the engineering team to develop machine learning models, integrate AI capabilities into ChadNova's platforms, and explore innovative applications of artificial intelligence to solve real-world challenges across Africa. My focus areas there: Artificial Intelligence, Machine Learning, Deep Learning and Data Science.
-En français : je suis Assistant Lead AI (ingénieur IA) chez ChadNova depuis 2025.
+En français : je suis Assistant Lead AI (ingénieur IA) chez ChadNova depuis 2025. Le titre « Assistant Lead AI » reste en anglais, on ne le traduit pas.
 
 ## What ChadNova is
 ChadNova is a youth-led technology, training and innovation organization from Chad. It builds, trains and launches AI-driven digital solutions in AgriTech, HealthTech, SecurityTech and EducationTech, and offers data science and AI, software development, digital governance, cloud, cybersecurity and technology consulting. It also runs the ChadNova Training Center and ChadNova Labs. Its mission is to move Chadian and African youth from talking to taking action and building solutions for their countries. Website: https://www.chadnova.com
 
 ## Availability and pricing
-Yes, I am available and open to freelance projects and new opportunities. Pricing and timelines depend on each project: contact me through the contact form (https://sidick.vercel.app/#contact) to discuss your project and get a quote.
+Yes, I am available and open to freelance projects and new opportunities. Pricing and timelines depend on each project: contact me through the contact form (https://www.sidickabdoulaye.com/#contact) to discuss your project and get a quote.
 En français : oui, je suis disponible pour des projets freelance et de nouvelles opportunités ; pour les tarifs, contactez-moi.
 
 ## My goal
@@ -67,29 +67,11 @@ En français : Calance AI est mon application mobile de suivi des calories par I
 ## Project: SnapChef
 A mobile app that lets you snap a photo of the ingredients in your fridge and instantly get a recipe. It uses an AI vision model (YOLOv8) to detect the ingredients and a large language model (OpenAI GPT-4o) to write the recipe, with a FastAPI (Python) backend. One of my favorite projects. Code: https://github.com/sidicksino/SnapChef
 
-## Project: AAPT
-A web platform for a non-profit in Chad that works on social cohesion. Built with React, Tailwind CSS, Supabase and i18next.
-
-## Project: Sino Ai
-An AI assistant web app that saves conversations. Built with React, Node.js, MongoDB and the OpenAI API. The code is public on my GitHub.
-
-## Project: Disease Risk Prediction
-A machine-learning app that estimates disease risk from health and lifestyle inputs. Built with Python, Scikit-learn, Pandas and Streamlit. The code is public on my GitHub.
-
-## Project: TchadInfos
-A mobile news app for Chad with category browsing and a live feed. Built with React Native, Expo, TypeScript and the NewsData.io API. The code is public on my GitHub.
-
-## Project: Académie Royale
-The official website of an educational institution in N'Djamena. Built with React, Tailwind CSS, Supabase and i18next.
-
-## Project: SinoCoffee
-A coffee brand website with a menu, subscriptions, a cart and sign-in. Built with React, TypeScript, Supabase and Tailwind CSS. The code is public on my GitHub.
-
 ## Other repositories
 My GitHub has 63 public repositories. Pinned ones include AI, SinoCoffee, tchadInfos_version1, team_work, Boutique_Backend and Boutique_Frontend.
 
 ## Where to find me
-Portfolio: https://sidick.vercel.app
+Portfolio: https://www.sidickabdoulaye.com
 GitHub: https://github.com/sidicksino
 LinkedIn: https://www.linkedin.com/in/sidick-sino/
 X: @sinobour

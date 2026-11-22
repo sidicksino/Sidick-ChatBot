@@ -11,7 +11,7 @@ Each case says what a good answer looks like:
   kind "smalltalk" any short friendly reply
   kind "manual"    no automatic check beyond the global ones; read it in the report
   `not`            regexes that must NOT appear
-  `lang`           "fr" -> the answer must be in French
+  `lang`           "fr" -> the answer must be in French; "en" -> it must not be in French
 Global checks on every answer: no "context"/rules leak, no Congo, no model name, and every URL,
 email or phone number in the answer must exist in knowledge/ (catches invented links).
 """
@@ -40,6 +40,7 @@ GLOBAL_BAD = [
     (r"qwen|alibaba|as an ai language model|openai developed me|I was (created|trained) by", "reveals model"),
     (r"REMINDER:|Rules:", "leaks the prompt"),
 ]
+ENGLISH_WORDS = re.compile(r"\b(i|you|your|my|the|is|are|and|with|for|of|to|in|on|it|this|that|can|have)\b", re.I)
 FRENCH_WORDS = re.compile(r"\b(je|j|tu|vous|est|suis|mes|mon|ton|tes|les|des|une|avec|pour|dans|sur|et|qui|que|pas|de|du|la|le|en|au|à|ici)\b", re.I)
 
 A, U, D, S, M = "answer", "unknown", "decline", "smalltalk", "manual"
@@ -59,7 +60,7 @@ CASES = [
     dict(q="Where do you study?", kind=A, has=[r"ULK|Kigali Independent|Libre de Kigali"]),
     dict(q="What are you studying?", kind=A, has=[r"Data Science"]),
     dict(q="What year are you in?", kind=A, has=[r"\b4|fourth"]),
-    dict(q="Où étudies-tu ?", kind=A, has=[r"ULK|Libre de Kigali|Indépendante de Kigali"], lang="fr"),
+    dict(q="Où étudies-tu ?", kind=A, has=[r"ULK|Libre de Kigali"], lang="fr", **{"not": [r"Indépendante"]}),
     dict(q="Where do you live?", kind=A, has=[r"N'Djamena|Kigali"]),
     dict(q="Where are you from?", kind=A, has=[r"Chad"]),
     dict(q="D'où viens-tu ?", kind=A, has=[r"Tchad"], lang="fr"),
@@ -68,7 +69,8 @@ CASES = [
     dict(q="Where do you work?", kind=A, has=[r"ChadNova"]),
     dict(q="What is your role at ChadNova?", kind=A, has=[r"Assistant Lead AI|AI Engineer"]),
     dict(q="Do you have work experience?", kind=A, has=[r"ChadNova"]),
-    dict(q="Quel est ton poste chez ChadNova ?", kind=A, has=[r"Assistant Lead AI|ingénieur IA|AI Engineer"], lang="fr"),
+    dict(q="Quel est ton poste chez ChadNova ?", kind=A, has=[r"Assistant Lead AI|ingénieur IA|AI Engineer"], lang="fr",
+         **{"not": [r"Gestionnaire"]}),
     dict(q="What languages do you speak?", kind=A, has=[r"French", r"English", r"Arabic"]),
     dict(q="Quelles langues parles-tu ?", kind=A, has=[r"arabe"], lang="fr"),
     dict(q="When will you graduate?", kind=A, has=[r"2027"]),
@@ -177,6 +179,15 @@ CASES = [
     dict(chat=["What mobile apps have you built?", "Tell me more about Wallet"], kind=A, has=[r"finance|expense"]),
     dict(chat=["What projects have you built?", "Give more details to the projects"], kind=M,
          **{"not": [r"Firebase", r"Redux", r"Flask"]}),
+    # --- from real conversations (2026-11-22 screenshots)
+    dict(q="donne moi donne lien", kind=A, has=[r"aapt-eight\.vercel\.app|sidickabdoulaye\.com/#work"], lang="fr"),
+    dict(q="Give me the links to your projects", kind=A, has=[r"aapt-eight\.vercel\.app|sidickabdoulaye\.com/#work"], lang="en"),
+    dict(q="I need for info", kind=M, lang="en"),
+    dict(q="What have you built?", kind=A, has=[r"AAPT|Acad[ée]mie"], lang="en"),
+    dict(chat=["Parle-moi de toi", "I need more info about you"], kind=A, has=[r"Sidick|ChadNova|Data"], lang="en"),
+    dict(chat=["donne moi donne lien", "How can I contact you"], kind=A, has=[r"sidickabdoulayesino1@gmail\.com"], lang="en"),
+    dict(chat=["Tell me about your projects", "Parle-moi de SINOINFOS"], kind=A, has=[r"Django|actualit"], lang="fr"),
+    dict(q="Where do you study?", kind=A, has=[r"Kigali Independent University|ULK"], lang="en"),
 ]
 
 
@@ -206,6 +217,8 @@ def check(case, answer):
     problems += [f"contains /{n}/" for n in case.get("not", []) if re.search(n, answer, re.I | re.M)]
     if case.get("lang") == "fr" and len(FRENCH_WORDS.findall(answer)) < 3:
         problems.append("not in French")
+    if case.get("lang") == "en" and len(FRENCH_WORDS.findall(answer)) > len(ENGLISH_WORDS.findall(answer)):
+        problems.append("answered in French")
     return problems
 
 

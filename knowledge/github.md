@@ -366,7 +366,7 @@ Smart-Parking-Management-System
 ## GitHub project: SidickPortfolio
 This is one of my GitHub repositories: SidickPortfolio.
 Main language: CSS.
-Live demo: https://sidick.vercel.app
+Live demo: https://www.sidickabdoulaye.com
 Code: https://github.com/sidicksino/SidickPortfolio (updated 2026-09-09, 0 stars).
 README:
 Sidick Sino — Portfolio

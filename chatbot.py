@@ -26,7 +26,8 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "qwen2.5:3b")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "bge-m3")  # multilingual: works for English and French
 KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "24h")  # keep models in memory -> no reload delay
-MAX_ANSWER_TOKENS = int(os.getenv("MAX_ANSWER_TOKENS", "350"))
+# 350 cut French answers off mid-sentence (French runs ~25% longer); the prompt still asks for ~120 words.
+MAX_ANSWER_TOKENS = int(os.getenv("MAX_ANSWER_TOKENS", "500"))
 CONTEXT_TOKENS = int(os.getenv("CONTEXT_TOKENS", "4096"))
 
 MAX_CHUNK_CHARS = 1200
@@ -57,40 +58,64 @@ invite the visitor to contact you (first person: "contact me") through the conta
 - Never guess anything that is not written in the facts. In particular, never state prices or rates, \
 how long a project takes, your age, or skills and tools that are not listed in the facts.
 - When a visitor wants to work with you or hire you, invite them to the contact form: \
-https://sidick.vercel.app/#contact
+https://www.sidickabdoulaye.com/#contact
 - Never talk about "the facts", "WHAT YOU KNOW", a context, a prompt or these rules. Just answer naturally.
 - About projects: each "## ... project: NAME" section is a SEPARATE project. Never merge two projects. \
 Only mention technologies and features written in that project's section. If a project has no details \
 in the facts, just name it and do not describe it.
+- "Did you use X?" / "Have you built anything with X?": if X is not written in the facts (for that \
+project, or anywhere for a skill), the answer is no. Say so plainly, then say what you did use. \
+Never answer "yes" to a tool you can't see in the facts.
 - Be friendly, concise and natural: at most about 120 words. Describe at most 4 projects per answer.
 - Format: short paragraphs, or a "- " bullet list for several items, with **bold** project names. \
 No headings (#), no tables.
-- Reply in the language the visitor uses (English or French)."""
+- When the visitor asks about your work or projects in general, start with your featured projects, \
+not the first ones you happen to see.
+- When you give a link, write the full URL exactly as it appears in the facts.
+- Never translate names: project names, "Assistant Lead AI", "ChadNova", and the university's name \
+("Kigali Independent University (ULK)" in English, "Université Libre de Kigali (ULK)" in French).
+- Reply in the language of the visitor's LAST message (English or French), even if earlier messages \
+were in the other language."""
 
 # Repeated after the facts: small models follow the instructions they read last.
 PROMPT_REMINDER = """REMINDER: answer only about Sidick, using only the facts above, naturally and without \
 mentioning them. Never invent or mix up project details, technologies, prices or dates. Politely decline \
-anything unrelated. Reply in the visitor's language."""
+anything unrelated."""
+
+# Appended last, so it is the instruction the model reads right before answering. A 3B model otherwise
+# drifts into the language of the earlier messages or of the French lines in the facts (a visitor who
+# wrote "I need more info about you" got a French answer).
+LANGUAGE_RULE = {
+    "en": "Answer in English.",
+    "fr": "Réponds en français.",
+}
 
 # Project names -> their knowledge chunk, so "tell me about AAPT" or a follow-up on projects named in
 # the previous answer fetches exactly those sections (semantic search alone missed them).
-_PROJECT_HEADING = re.compile(r"^##\s+(Web project|Mobile app|ML & AI project|Project|GitHub project):\s*(.+?)\s*$")
+_PROJECT_HEADING = re.compile(r"^##\s+(Web project|Mobile app|ML & AI project|Design project|Project|GitHub project):\s*(.+?)\s*$")
 _GENERIC_NAMES = {"test", "animation", "portfolio", "website", "app", "project", "demo", "chatbot", "quiz",
                   "to do", "todo", "news", "blog", "api", "backend", "frontend"}
 MAX_NAMED_CHUNKS = 5
 
 # "What mobile apps have you built?" -> the category's list section + its project sections.
+# The list sections and their counts are generated from the dashboard (knowledge/projects.md).
 # Only when the question is about work (projects/apps/built...), so "do you know React Native?"
 # alone doesn't pull in every app.
 _WORK_WORDS = re.compile(r"\b(projects?|projets?|apps?|applications?|built|build|made|developed|created|"
                          r"réalis\w*|fait\w*|cré\w*|développ\w*|works?|travaux|portfolio|websites?|sites?)\b", re.I)
 _CATEGORIES = [
-    (re.compile(r"\b(mobiles?|ios|android|react native|expo)\b", re.I), "Mobile app", "list of my 4 mobile apps"),
-    (re.compile(r"\b(web|websites?|sites?|web ?apps?)\b", re.I), "Web project", "list of my 7 web projects"),
+    (re.compile(r"\b(mobiles?|ios|android|react native|expo)\b", re.I), "Mobile app", "list of my mobile apps"),
+    (re.compile(r"\b(web|websites?|sites?|web ?apps?)\b", re.I), "Web project", "list of my web projects"),
     (re.compile(r"\b(machine learning|ml|ai|ia|intelligence artificielle|apprentissage automatique|"
-                r"data science|predictions?|prédictions?)\b", re.I), "ML & AI project", "list of my 3 ML & AI projects"),
-    (re.compile(r"\b(designs?|figma|ui|ux)\b", re.I), "Design projects", "list of my 4 design projects"),
+                r"data science|predictions?|prédictions?)\b", re.I), "ML & AI project", "list of my ML & AI projects"),
+    (re.compile(r"\b(designs?|figma|ui|ux)\b", re.I), "Design project", "list of my design projects"),
 ]
+# General questions ("what have you built?", "I need info") get the overview with the featured list,
+# and link requests ("donne-moi les liens") get the section with every link.
+_OVERVIEW_TITLE = "Portfolio: overview of my projects"
+_LINKS_TITLE = "Portfolio: links to my projects"
+_LINK_WORDS = re.compile(r"\b(links?|liens?|urls?|live|demos?|démos?|en ligne|online)\b", re.I)
+_VAGUE_INFO = re.compile(r"\b(info|infos|information|informations|details?|détails?)\b", re.I)
 
 
 def _norm(text):
@@ -108,14 +133,14 @@ CANNED = {
         "bye": "Thanks for visiting! Feel free to reach out through the contact form anytime.",
         "ai": "I'm Sidick's AI assistant: I answer on his behalf using information he provided about his "
               "background, skills and projects. For a direct conversation with Sidick, use the contact form: "
-              "https://sidick.vercel.app/#contact",
+              "https://www.sidickabdoulaye.com/#contact",
         "contact": "You can reach me here:\n{card}\nI'd be happy to hear about your project!",
         "business": "Yes, I'm available and open to freelance projects and new opportunities! Pricing and "
                     "timelines depend on each project, so tell me about yours through the contact form and I'll "
-                    "get back to you with a quote: https://sidick.vercel.app/#contact",
+                    "get back to you with a quote: https://www.sidickabdoulaye.com/#contact",
         "hire": "Yes, that's what I do! I build web platforms (React, Node.js, Django), cross-platform mobile apps "
                 "(React Native, Expo) and UI/UX designs (Figma). Tell me about your project through the contact "
-                "form and I'll get back to you: https://sidick.vercel.app/#contact",
+                "form and I'll get back to you: https://www.sidickabdoulaye.com/#contact",
     },
     "fr": {
         "offtopic": "Je suis l'assistant de Sidick, je ne peux donc répondre qu'aux questions sur Sidick : "
@@ -126,14 +151,14 @@ CANNED = {
         "bye": "Merci de ta visite ! N'hésite pas à me contacter via le formulaire de contact.",
         "ai": "Je suis l'assistant IA de Sidick : je réponds en son nom à partir des informations qu'il a "
               "fournies sur son parcours, ses compétences et ses projets. Pour discuter directement avec Sidick, "
-              "utilise le formulaire de contact : https://sidick.vercel.app/#contact",
+              "utilise le formulaire de contact : https://www.sidickabdoulaye.com/#contact",
         "contact": "Tu peux me joindre ici :\n{card}\nAu plaisir d'échanger sur ton projet !",
         "business": "Oui, je suis disponible pour des projets freelance et de nouvelles opportunités ! Les tarifs "
                     "et les délais dépendent de chaque projet : présente-moi le tien via le formulaire de contact et "
-                    "je te répondrai avec un devis : https://sidick.vercel.app/#contact",
+                    "je te répondrai avec un devis : https://www.sidickabdoulaye.com/#contact",
         "hire": "Oui, c'est mon métier ! Je crée des plateformes web (React, Node.js, Django), des applications "
                 "mobiles multiplateformes (React Native, Expo) et des designs UI/UX (Figma). Présente-moi ton projet "
-                "via le formulaire de contact et je te répondrai : https://sidick.vercel.app/#contact",
+                "via le formulaire de contact et je te répondrai : https://www.sidickabdoulaye.com/#contact",
     },
 }
 CARD_LABELS = {
@@ -221,6 +246,27 @@ _OFFTOPIC_REQUEST = re.compile(
     r"stories|story|histoires?|translations?|traductions?|summary|résumé|texts?|textes?|sentences?|"
     r"phrases?|paragraphs?|paragraphes?)\b",
     re.I)
+# "Did you use TensorFlow for the Pima app?", "Have you built anything with Flutter?". The 3B model answers
+# "yes" to these whatever the facts say, so they're answered from the knowledge itself (see used_tool_reply).
+_USED_TOOL_QUESTION = re.compile(
+    r"\b(did you (use|build|make|code|work)|have you (ever )?(used|built|made|worked)|do you (use|know|work with)|"
+    r"was it (built|made|written)|is it (built|made|written)|as[- ]tu (utilisé|fait|codé|travaillé)|"
+    r"tu as (utilisé|fait|codé|travaillé)|connais[- ]tu|tu connais|tu maîtrises|utilises[- ]tu)\b", re.I)
+# Tools a visitor may ask about. Anything also written in the knowledge counts as known (added at load).
+_TECH_VOCAB = {
+    "flutter", "dart", "kotlin", "swift", "swiftui", "java", "c#", "c++", "go", "golang", "rust", "ruby", "rails",
+    "php", "laravel", "symfony", "vue", "vue.js", "angular", "svelte", "nuxt", "next.js", "nextjs", "gatsby",
+    "spring", "flask", "fastapi", "django", "pytorch", "keras", "tensorflow", "scikit-learn", "xgboost", "opencv",
+    "hugging face", "langchain", "postgresql", "postgres", "redis", "graphql", "firebase", "aws", "azure", "gcp",
+    "kubernetes", "docker", "unity", "wordpress", "shopify", "redux", "jquery", "bootstrap", "sass", "webflow",
+}
+
+
+def _tech_mentions(text, vocab):
+    t = " " + text.lower() + " "
+    return [v for v in vocab if re.search(r"(?<![\w.#+])" + re.escape(v) + r"(?![\w#+])", t)]
+
+
 _THIRD_PARTY = re.compile(r"^\s*(who|qui|c'est qui)\s+(is|was|are|est|était|sont)\b", re.I)
 _FOLLOW_UP_WORDS = 6  # questions this short, mid-conversation, are searched with the previous one
 # ...as are questions that point back at the conversation ("more details on these projects").
@@ -232,16 +278,27 @@ _REFERS_BACK = re.compile(r"\b(these|those|them|they|it|its|this one|that one|mo
 # "I can only talk about Sidick" reply. ("Who is Messi?" has none of these words, so it's still declined.)
 _ADDRESSES_SIDICK = re.compile(r"\b(you|your|yours|yourself|sidick|sino|tu|toi|ton|ta|tes|t'|vous|votre|vos)\b", re.I)
 
+_ENGLISH_HINTS = re.compile(
+    r"\b(the|what|who|whats|you|your|yours|is|are|i|i'm|me|my|need|want|more|about|how|can|could|tell|give|"
+    r"show|do|does|have|has|links?|projects?|please|pls|info|where|when|which|why|with|for|and|of|to|it|"
+    r"hi|hello|hey|thanks?|thx|bye|whos|who's|ur|yes|no|okay)\b", re.I)
 _FRENCH_HINTS = re.compile(
     r"[àâçéèêëîïôûùüÿœ]|\b(je|tu|il|nous|vous|est|es|suis|qui|quoi|quel|quels|quelle|quelles|comment|pourquoi|"
     r"où|combien|le|la|les|des|du|une|un|et|ton|ta|tes|mon|ma|mes|avec|pour|dans|sur|peux|bonjour|salut|"
     r"merci|parle|moi|toi)\b", re.I)
 
 
-def detect_lang(text):
-    """Very small English/French guess, only used for the canned replies above."""
-    return "fr" if len(_FRENCH_HINTS.findall(text)) >= 1 and not re.search(r"\b(the|what|who|you|is|are)\b", text, re.I) \
-        else "en"
+def detect_lang(text, fallback="en"):
+    """English or French, from the words of this one message. Used for the canned replies and to tell the
+    model which language to answer in. A message with no clear signal ("SinoCoffee?", "ok") falls back
+    to `fallback`: the site's language, sent by the widget."""
+    fr = len(_FRENCH_HINTS.findall(text))
+    en = len(_ENGLISH_HINTS.findall(text))
+    if fr > en:
+        return "fr"
+    if en > fr:
+        return "en"
+    return fallback if fallback in ("en", "fr") else "en"
 
 
 # ---------------------------------------------------------------- knowledge loading
@@ -352,6 +409,19 @@ class SidickBot:
              + [i for i, c in enumerate(self.chunks) if c.startswith(f"## {prefix}")])
             for pattern, prefix, list_title in _CATEGORIES
         ]
+        self.overview_chunk = next((i for i, c in enumerate(self.chunks) if c.startswith(f"## {_OVERVIEW_TITLE}")), None)
+        listed = re.findall(r"^(?:Tech|Data Science & Visualization|Frontend Development|Mobile & Design|"
+                            r"Backend Development):\s*(.+)$", "\n".join(self.chunks), re.M)
+        names = [t.strip(" .") for line in listed for t in line.split(",") if t.strip(" .")]
+        self.tech_display = {n.lower(): n for n in names}  # "tensorflow" -> "TensorFlow"
+        self.tech_vocab = _TECH_VOCAB | set(self.tech_display)
+        # First word of each portfolio project's name, when it names only one project ("pima", "wallet").
+        firsts = {}
+        for name, (i, curated) in self.project_index.items():
+            if curated and len(name.split()[0]) >= 4:
+                firsts.setdefault(name.split()[0], set()).add(i)
+        self.short_names = {w: next(iter(ids)) for w, ids in firsts.items() if len(ids) == 1}
+        self.links_chunk = next((i for i, c in enumerate(self.chunks) if c.startswith(f"## {_LINKS_TITLE}")), None)
         print(f"Loaded {len(self.chunks)} knowledge chunks, {len(self.project_index)} project names. "
               f"Chat: {CHAT_MODEL}, embeddings: {EMBED_MODEL}", flush=True)
 
@@ -380,10 +450,14 @@ class SidickBot:
         t = _norm(text)
         found = sorted((t.find(name), i) for name, (i, _) in self.project_index.items() if name in t)
         picked = [i for _, i in found]
-        if _WORK_WORDS.search(text):
-            for pattern, indexes in self.category_chunks:
-                if pattern.search(text):
-                    picked += indexes
+        if _LINK_WORDS.search(text) and self.links_chunk is not None:
+            picked.insert(0, self.links_chunk)
+        if _WORK_WORDS.search(text) or _VAGUE_INFO.search(text):
+            categories = [indexes for pattern, indexes in self.category_chunks if pattern.search(text)]
+            for indexes in categories:
+                picked += indexes
+            if not categories and self.overview_chunk is not None:  # "what have you built?"
+                picked.append(self.overview_chunk)
         return list(dict.fromkeys(picked))
 
     def _chunk_vectors(self):
@@ -475,11 +549,44 @@ class SidickBot:
                 picked.append(int(i))
         return None, [(self.chunks[i], float(scores[i])) for i in picked]
 
+    def used_tool_reply(self, question, lang):
+        """Exact yes/no for "did you use X (for project P)?", or None to let the model answer.
+
+        Only answers "no": a tool that is in the facts goes to the model, which then has the right section."""
+        if not _USED_TOOL_QUESTION.search(question):
+            return None
+        tools = _tech_mentions(question, self.tech_vocab)
+        if not tools:
+            return None
+        named = [i for i in self.mentioned_projects(question) if _PROJECT_HEADING.match(self.chunks[i].split("\n", 1)[0])]
+        if not named:  # "the Pima app" for "Pima Diabetes Prediction App"
+            t = _norm(question)
+            named = [i for word, i in self.short_names.items() if f" {word} " in t]
+        scope = self.chunks[named[0]] if named else "\n".join(self.chunks)
+        missing = [t for t in tools if not _tech_mentions(scope, [t])]
+        if not missing:
+            return None
+        tool = self.tech_display.get(missing[0]) or (missing[0].upper() if len(missing[0]) <= 3 else missing[0].title())
+        if named:
+            m = _PROJECT_HEADING.match(self.chunks[named[0]].split("\n", 1)[0])
+            stack = re.search(r"^Tech:\s*(.+?)\.?$", self.chunks[named[0]], re.M)
+            used = stack.group(1) if stack else None
+            if lang == "fr":
+                return (f"Non, je n'ai pas utilisé {tool} pour **{m.group(2)}**."
+                        + (f" Pour ce projet, j'ai utilisé : {used}." if used else ""))
+            return (f"No, I didn't use {tool} for **{m.group(2)}**."
+                    + (f" For that project I used {used}." if used else ""))
+        if lang == "fr":
+            return (f"Non, je n'ai pas encore travaillé avec {tool}. Pour le mobile j'utilise React Native et Expo, "
+                    "pour le web React, Node.js et Django, et pour la data science Python, Scikit-learn et TensorFlow.")
+        return (f"No, I haven't worked with {tool} yet. For mobile I use React Native and Expo, for the web React, "
+                "Node.js and Django, and for data science Python, Scikit-learn and TensorFlow.")
+
     def _keyword_scores(self, question):
         words = {w for w in re.findall(r"\w{3,}", question.lower())}
         return np.array([sum(w in c.lower() for w in words) for c in self.chunks], dtype=np.float32)
 
-    def build_system_prompt(self, question, retrieved=None):
+    def build_system_prompt(self, question, retrieved=None, lang="en"):
         # Always include the identity chunks so "Who are you?" works even when similarity is weak.
         chunks = [c for c, _ in (retrieved if retrieved is not None else self.retrieve(question))]
         always = [c for c in self.chunks[:2] if c not in chunks]
@@ -493,7 +600,7 @@ class SidickBot:
             if names else ""
         )
         return (f"{SYSTEM_PROMPT}\n\nWHAT YOU KNOW:\n" + "\n\n".join(always + chunks)
-                + f"\n\n{PROMPT_REMINDER}{projects_note}")
+                + f"\n\n{PROMPT_REMINDER}{projects_note}\n{LANGUAGE_RULE[lang]}")
 
     @staticmethod
     def _history_messages(history):
@@ -510,10 +617,13 @@ class SidickBot:
         best = [c for c, _ in self.retrieve(question, k=2)]
         return OFFLINE_PREFIX + "\n\n".join(re.sub(r"^#+\s*", "", c, flags=re.M) for c in best)
 
-    def stream_answer(self, question, history=None):
-        """Yield the answer piece by piece (so visitors see text appear while a CPU server thinks)."""
+    def stream_answer(self, question, history=None, page_lang=None):
+        """Yield the answer piece by piece (so visitors see text appear while a CPU server thinks).
+
+        page_lang: the site's language ("en"/"fr"), only used when the message itself is ambiguous."""
         question = _extract_text(question).strip()
-        key = question.lower()
+        lang = detect_lang(question, page_lang or "en")
+        key = f"{lang}:{question.lower()}"
         if not history and key in self.cache:
             yield self.cache[key]
             return
@@ -521,13 +631,18 @@ class SidickBot:
         past = self._history_messages(history)
         kind, retrieved = self.check_scope(question, past)
         if kind:  # small talk, off-topic, contact, "are you a bot?": instant reply, no LLM call
-            lang = detect_lang(question)
             yield CANNED[lang][kind].format(card=self.contact_card(lang))
             return
 
-        messages = [{"role": "system", "content": self.build_system_prompt(question, retrieved)}]
+        exact = self.used_tool_reply(question, lang)
+        if exact:
+            yield exact
+            return
+
+        messages = [{"role": "system", "content": self.build_system_prompt(question, retrieved, lang)}]
         messages += past
-        messages.append({"role": "user", "content": question})
+        # The language reminder also rides on the question itself: it's the last thing the model reads.
+        messages.append({"role": "user", "content": f"{question}\n\n({LANGUAGE_RULE[lang]})"})
 
         parts = []
         try:
@@ -566,5 +681,5 @@ class SidickBot:
         if text and not history:
             self.cache[key] = text
 
-    def answer(self, question, history=None):
-        return "".join(self.stream_answer(question, history))
+    def answer(self, question, history=None, page_lang=None):
+        return "".join(self.stream_answer(question, history, page_lang))
