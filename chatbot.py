@@ -147,6 +147,9 @@ CANNED = {
         "offtopic": "I'm Sidick's assistant, so I can only answer questions about Sidick: his skills, "
                     "projects, services and background. Try asking me what I've built, or how to contact me!",
         "greeting": "Hi! 👋 Ask me anything about my skills, projects, services or background.",
+        "howareyou": "I'm doing great, thanks for asking! 😊 Ask me anything about my projects, skills or background.",
+        "unavailable": "Sorry, I can't answer that properly right now. Please try again in a moment, or reach me "
+                       "directly through the contact form: https://www.sidickabdoulaye.com/#contact",
         "thanks": "You're welcome! Anything else you'd like to know about my work?",
         "bye": "Thanks for visiting! Feel free to reach out through the contact form anytime.",
         "ai": "I'm Sidick's AI assistant: I answer on his behalf using information he provided about his "
@@ -165,6 +168,9 @@ CANNED = {
                     "ses compétences, ses projets, ses services et son parcours. Demande-moi par exemple "
                     "ce que j'ai réalisé, ou comment me contacter !",
         "greeting": "Salut ! 👋 Pose-moi tes questions sur mes compétences, mes projets, mes services ou mon parcours.",
+        "howareyou": "Ça va très bien, merci ! 😊 Pose-moi tes questions sur mes projets, mes compétences ou mon parcours.",
+        "unavailable": "Désolé, je ne peux pas bien répondre pour le moment. Réessaie dans un instant, ou écris-moi "
+                       "directement via le formulaire de contact : https://www.sidickabdoulaye.com/#contact",
         "thanks": "Avec plaisir ! Tu veux savoir autre chose sur mon travail ?",
         "bye": "Merci de ta visite ! N'hésite pas à me contacter via le formulaire de contact.",
         "ai": "Je suis l'assistant IA de Sidick : je réponds en son nom à partir des informations qu'il a "
@@ -240,6 +246,9 @@ _OFFTOPIC_TOPIC = re.compile(
 _SMALL_TALK = [
     ("greeting", re.compile(r"^(hi+|hello|hey|yo|hiya|good (morning|afternoon|evening)|bonjour|bonsoir|salut|"
                             r"coucou|slt|cc)\b[\s!.,?👋🙂😊]*(sidick|there|toi)?[\s!.,?👋🙂😊]*$", re.I)),
+    ("howareyou", re.compile(r"^(hi|hello|hey|salut|bonjour)?[\s,!]*(how are you|how r u|how are u|how's it going|"
+                             r"how is it going|how do you do|what's up|whats up|sup|ça va|ca va|comment vas[- ]tu|"
+                             r"comment ça va|comment ca va|tu vas bien|vous allez bien)\b[\s!.,?🙂😊]*(sidick|toi)?[\s!.,?🙂😊]*$", re.I)),
     ("thanks", re.compile(r"^(thanks?( you)?( so much| a lot)?|thx|ty|merci( beaucoup| bien)?|"
                           r"great|cool|nice|super|ok(ay)?|d'accord)\b[\s!.,🙏👍🙂😊]*$", re.I)),
     ("bye", re.compile(r"^(bye|goodbye|see you|ciao|au revoir|à bientôt|a\+|bonne (journée|soirée))\b[\s!.,👋]*$", re.I)),
@@ -692,9 +701,13 @@ class SidickBot:
                 messages.append({"role": "assistant" if role == "assistant" else "user", "content": text})
         return messages
 
-    def offline_answer(self, question):
-        best = [c for c, _ in self.retrieve(question, k=2)]
-        return OFFLINE_PREFIX + "\n\n".join(re.sub(r"^#+\s*", "", c, flags=re.M) for c in best)
+    def offline_answer(self, question, lang="en"):
+        """Answer straight from the knowledge when the model can't be reached. Only when something actually
+        matches: quoting a random section ("How are you?" got an e-commerce project) is worse than saying so."""
+        best = [(c, score) for c, score in self.retrieve(question, k=2) if score > 0]
+        if not best:
+            return CANNED[lang]["unavailable"]
+        return OFFLINE_PREFIX + "\n\n".join(re.sub(r"^#+\s*", "", c, flags=re.M) for c, _ in best)
 
     def stream_answer(self, question, history=None, page_lang=None):
         """Yield the answer piece by piece (so visitors see text appear while a CPU server thinks).
@@ -730,9 +743,14 @@ class SidickBot:
                 parts.append(piece)
                 yield piece
         except (requests.RequestException, RuntimeError, ValueError) as e:
-            print(f"[warn] {LLM_PROVIDER} failed: {type(e).__name__}: {str(e)[:200]}", flush=True)
+            hint = ""
+            if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code in (401, 403):
+                hint = " -> the API rejected the key: check LLM_API_KEY"
+            elif isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code == 404:
+                hint = " -> unknown model or URL: check LLM_MODEL and LLM_BASE_URL"
+            print(f"[warn] {LLM_PROVIDER} failed: {type(e).__name__}: {str(e)[:200]}{hint}", flush=True)
             if not parts:  # nothing sent yet -> fall back to a retrieval-only answer
-                yield self.offline_answer(question)
+                yield self.offline_answer(question, lang)
             return
 
         text = "".join(parts)

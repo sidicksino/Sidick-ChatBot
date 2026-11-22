@@ -166,6 +166,7 @@ CASES = [
     # --- small talk
     dict(q="hi", kind=S), dict(q="Bonjour", kind=S, lang="fr"), dict(q="thanks!", kind=S),
     dict(q="merci", kind=S, lang="fr"), dict(q="bye", kind=S), dict(q="ok", kind=S),
+    dict(q="How are you ?", kind=S, lang="en"), dict(q="ça va ?", kind=S, lang="fr"),
     dict(q="lol", kind=M), dict(q="😊", kind=M), dict(q="you are stupid", kind=M), dict(q="?", kind=M),
     dict(q="WHAT IS YOUR PHONE NUMBER", kind=A, has=[r"793"]),
     dict(q="ur email pls", kind=A, has=[r"sidickabdoulayesino1@gmail\.com"]),
